@@ -21,9 +21,9 @@ Además está pensado para jugar con amigos sin coincidir en horario: cada uno j
 ## Cómo se juega
 
 1. **Diseñá.** Elegí cabeza, torso y patas entre ocho animales. La cabeza define cómo ataca (mordida, veneno a distancia, carga, golpe en área). El torso define cuánto aguanta (vida, armadura, espinas). Las patas definen qué tan rápido va. Cada combinación tiene su nombre: una cabeza de araña sobre un caparazón de tortuga con patas de rana es una *Aratuga saltarín*.
-2. **Desplegá.** Ubicá tus bestias en tu mitad del tablero. Cada una cuesta biomasa, y cada ronda recibís más.
+2. **Desplegá.** Cada diseño que guardás queda en **Mis bestias** durante toda la partida. En el campo elegís una y tocás casillas de tu mitad del tablero para ubicar copias. Cada una cuesta biomasa; cada ronda recibís más y lo que no gastás se guarda.
 3. **Mirá el combate.** Las bestias avanzan y atacan solas al enemigo más cercano.
-4. **Contrarrestá.** Mientras preparás la ronda ves lo que el rival desplegó en la anterior, pero no lo que agregó después. El caparazón frena los mordiscos rápidos, el veneno atraviesa la armadura y los animales veloces alcanzan a los que atacan de lejos.
+4. **Mejorá y contrarrestá.** Podés subir de nivel un diseño (todas sus copias mejoran) o reciclar bestias: lo comprado esta ronda devuelve todo, una veterana devuelve la mitad. Mientras preparás la ronda ves lo que el rival desplegó en la anterior, pero no lo que agregó después. El caparazón frena los mordiscos rápidos, el veneno atraviesa la armadura y los animales veloces alcanzan a los que atacan de lejos.
 5. **Ganá.** Quien pierde una ronda pierde vida según cuántas bestias rivales quedaron en pie. Gana quien deja al otro en cero.
 
 | Combate | En el celular |
@@ -32,7 +32,7 @@ Además está pensado para jugar con amigos sin coincidir en horario: cada uno j
 
 ## Modos
 
-- **Contra la IA.** Una IA que conserva su ejército entre rondas y elige qué sumar según lo que le mostraste.
+- **Contra la IA**, en cuatro dificultades. Desde Rival para arriba, la IA prueba decenas de ejércitos posibles simulando el combate contra lo que le mostraste y se queda con el que mejor te gana. Experto además anticipa tu respuesta; Pesadilla evoluciona su ejército ronda a ronda.
 - **Duelo con un amigo.** Desplegás tu ronda y le mandás el link. Tu amigo despliega la suya, ve el combate y te devuelve otro link. Así hasta que alguien gana.
 
 ## Estado del proyecto
@@ -43,6 +43,8 @@ Lo que hay:
 
 - 8 animales, 3 partes cada uno: 512 bestias posibles
 - 10 habilidades (veneno, caparazón, espinas, carga, salto, manada y otras)
+- Niveles por diseño y reciclaje con costo para las veteranas
+- IA en cuatro dificultades que piensa simulando combates
 - Partidas contra la IA y duelos asíncronos por link
 - Funciona en computadora y celular, sin instalar nada
 
@@ -50,7 +52,8 @@ Lo que viene:
 
 - Más animales, con roles nuevos (voladores, excavadores, sanadores)
 - Animaciones de ataque y muerte, y más mapas
-- Mejoras para las unidades entre rondas
+- Mutaciones: elegir 1 de 3 genes por ronda para un diseño
+- Desbloqueables entre partidas que sumen opciones, no poder
 - Un servidor chico para que el duelo oculte de verdad el ejército rival
 
 El detalle (alcance, decisiones y hoja de ruta) está en [docs/DISEÑO.md](docs/DISEÑO.md).
@@ -72,7 +75,7 @@ assets/                 sprites de las piezas y mapas, listos para el juego
 arte/fuentes/           imágenes originales con fondo magenta
 tools/procesar_arte.py  recorta las piezas, quita el fondo y calcula los anclajes
 src/ui/juego.js         flujo de la partida e interacción
-tests/sim.test.mjs      tests de determinismo y balance
+tests/                  tests de simulación, economía e IA (npm test)
 docs/DISEÑO.md          documento de diseño
 docs/ARTE.md            cómo se generó el arte y cómo sumar animales o mapas
 ```

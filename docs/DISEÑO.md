@@ -33,7 +33,41 @@ Separado por escalones, porque cada uno es un salto distinto:
 - Mientras desplegás, **ves lo que el rival puso la ronda pasada**, pero no lo nuevo: ahí está el juego de contrarrestar.
 - El que pierde la ronda pierde vida según **cuántas unidades rivales sobrevivieron**.
 
-Todavía no implementado de Mechabellum: mejoras por unidad, tecnologías, especialistas, cartas de refuerzo, escuadrones, veteranía.
+Ya implementado de Mechabellum: mejoras por diseño (niveles) y el costo de cambiar de estrategia (reciclar veteranas devuelve la mitad). Todavía no: tecnologías, especialistas, cartas de refuerzo, escuadrones.
+
+## Dificultad y progresión
+
+El objetivo es que el juego sea difícil y que cada decisión pese. Se organiza en tres capas.
+
+### 1. Una IA que contrarresta (implementado)
+
+Como el combate es determinista y rápido, la IA **prueba antes de decidir**: arma muchos ejércitos candidatos y simula cada uno contra tu ejército de la ronda pasada (lo mismo que vos ves de ella; nunca mira lo que estás desplegando ahora).
+
+| Dificultad | Qué hace |
+|---|---|
+| Aprendiz | Recetas fijas con algo de contra-elección |
+| Rival | Prueba decenas de combinaciones contra tu último ejército |
+| Experto | Prueba más, anticipa lo que podrías sumar y cuida la ubicación |
+| Pesadilla | Búsqueda evolutiva: conserva y muta sus mejores ejércitos ronda a ronda |
+
+Piensa en tandas cortas para no trabar la pantalla. En las pruebas, Rival y Experto le ganaron a Aprendiz en todas las partidas; Pesadilla todavía no es claramente más fuerte que Experto.
+
+### 2. Progreso dentro de la partida (implementado en parte)
+
+- **Mis bestias:** cada diseño que creás queda disponible toda la partida.
+- **Niveles por diseño:** subir un diseño mejora todas sus copias (nivel 2: vida ×1,35 y daño ×1,25; nivel 3: vida ×1,75 y daño ×1,5). Cuesta 2× y 4× el costo de la bestia.
+- **Veteranas:** reciclar algo que compraste esta ronda devuelve todo; reciclar algo que sobrevivió de una ronda anterior devuelve la mitad. La biomasa que no gastás se guarda.
+- **Pendiente: mutaciones.** Cada ronda elegís 1 de 3 genes al azar para un diseño (*Sangre ácida*: daña al morir; *Corteza*: +3 armadura y −15% velocidad; *Feromonas*: aliados cercanos pegan 10% más; *Hambre*: se cura al matar; *Ojos compuestos*: +25% alcance).
+- **Pendiente: familias.** Bonus por juntar 3 o más partes de una familia: mamíferos (fuerza en manada), artrópodos (veneno que se acumula más), reptiles y anfibios (regeneración).
+
+### 3. Desbloqueables entre partidas (pendiente)
+
+Regla para no romper el PvP: **se desbloquean opciones, no poder**.
+
+- **Genoteca:** se arranca con 4 animales y los demás se ganan con logros. Animales nuevos con roles nuevos (murciélago que vuela, topo que aparece en la retaguardia, mantis con golpe crítico).
+- **Expediciones:** campaña de rivales con personalidad en mapas distintos; cada victoria desbloquea un animal o una mutación.
+- **Desafío del día:** el mismo ejército rival para todos, con presupuesto fijo; ganar gastando lo menos posible y compartir el resultado.
+- **Informe de batalla:** qué diseño hizo más daño y cuál cayó primero, para entender por qué ganaste o perdiste.
 
 ## Partes del prototipo
 
