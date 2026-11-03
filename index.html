@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>BeastMixer</title>
+  <meta name="description" content="Mezclá partes de animales, desplegá tu ejército y mirá el combate. Prototipo de auto-battler.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/estilo.css">
+</head>
+<body>
+  <header class="barra">
+    <h1 class="marca">BeastMixer</h1>
+    <div class="marcador" id="marcador" hidden>
+      <div class="dato"><span class="dato-etq">Ronda</span><span class="dato-val" id="ronda">1</span></div>
+      <div class="dato"><span class="dato-etq">Biomasa</span><span class="dato-val" id="biomasa">60</span></div>
+      <div class="vidas">
+        <div class="vida vida-yo"><span class="vida-nombre" id="nombreYo">Vos</span><span class="vida-barra"><i id="vidaYo"></i></span><span class="vida-num" id="vidaYoNum">100</span></div>
+        <div class="vida vida-rival"><span class="vida-nombre" id="nombreRival">Rival</span><span class="vida-barra"><i id="vidaRival"></i></span><span class="vida-num" id="vidaRivalNum">100</span></div>
+      </div>
+    </div>
+    <button class="btn btn-principal" id="btnCombatir" hidden disabled>Combatir</button>
+  </header>
+
+  <main class="mesa" id="mesa" hidden>
+    <section class="tablero" aria-label="Campo de batalla">
+      <p class="aviso" id="aviso" aria-live="polite"></p>
+      <div class="lienzo"><canvas id="campo"></canvas></div>
+      <div class="velocidades oculto" id="velocidades">
+        <button class="btn btn-chico" data-vel="1" aria-pressed="true">×1</button>
+        <button class="btn btn-chico" data-vel="2" aria-pressed="false">×2</button>
+        <button class="btn btn-chico" data-vel="4" aria-pressed="false">×4</button>
+        <button class="btn btn-chico" id="btnSaltar">Ver resultado</button>
+      </div>
+    </section>
+
+    <aside class="lab" id="lab" aria-label="Laboratorio">
+      <div class="lamina">
+        <canvas id="lamina" width="320" height="230" aria-hidden="true"></canvas>
+        <div class="lamina-pie">
+          <h2 class="especie" id="especie">Lobo</h2>
+          <span class="costo" id="costo"><b>11</b> de biomasa</span>
+        </div>
+      </div>
+
+      <div class="partes" id="partes"></div>
+
+      <dl class="ficha" id="ficha"></dl>
+      <ul class="habilidades" id="habilidades"></ul>
+
+      <div class="seleccion" id="seleccion" hidden>
+        <p id="seleccionTexto"></p>
+        <div class="seleccion-acciones">
+          <button class="btn" id="btnCopiar">Usar este diseño</button>
+          <button class="btn btn-peligro" id="btnReciclar">Reciclar</button>
+        </div>
+      </div>
+      <p class="pista" id="pista">Elegí cabeza, torso y patas. Después tocá una casilla de tu zona (abajo) para desplegar la bestia.</p>
+    </aside>
+  </main>
+
+  <!-- Pantallas superpuestas -->
+  <section class="pantalla" id="pInicio">
+    <div class="tarjeta tarjeta-inicio">
+      <canvas id="portada" width="560" height="220" aria-hidden="true"></canvas>
+      <h2 class="titular">Mezclá bestias.<br>Desplegalas.<br>Mirá quién queda en pie.</h2>
+      <p>Cada bestia es cabeza, torso y patas de animales distintos. Vos armás y ubicás; el combate se juega solo. Gana el último con vida.</p>
+      <div class="acciones">
+        <button class="btn btn-principal" id="btnIA">Jugar contra la IA</button>
+        <button class="btn" id="btnDuelo">Retar a un amigo por link</button>
+        <button class="btn btn-texto" id="btnAyuda">Cómo se juega</button>
+      </div>
+      <p class="credito">Prototipo en desarrollo · Desarrollado por Juan M. Comparini</p>
+    </div>
+  </section>
+
+  <section class="pantalla" id="pNombre" hidden>
+    <form class="tarjeta" id="formNombre">
+      <h2 id="nombreTitulo">¿Cómo te llamás?</h2>
+      <p id="nombreTexto">Tu rival va a ver este nombre.</p>
+      <input id="inputNombre" maxlength="16" autocomplete="nickname" required placeholder="Tu nombre">
+      <div class="acciones">
+        <button class="btn btn-principal" type="submit">Empezar</button>
+        <button class="btn btn-texto" type="button" data-volver>Volver</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="pantalla" id="pResultado" hidden>
+    <div class="tarjeta">
+      <h2 id="resTitulo">Ganaste la ronda</h2>
+      <p id="resTexto"></p>
+      <div class="acciones" id="resAcciones"></div>
+    </div>
+  </section>
+
+  <section class="pantalla" id="pCompartir" hidden>
+    <div class="tarjeta">
+      <h2 id="compTitulo">Ejército enviado</h2>
+      <p id="compTexto">Mandale este link a tu rival. Cuando juegue su ronda, te devuelve otro link con el combate.</p>
+      <input id="compLink" readonly aria-label="Link del duelo">
+      <div class="acciones">
+        <a class="btn btn-principal" id="compWhatsapp" target="_blank" rel="noopener">Enviar por WhatsApp</a>
+        <button class="btn" id="compCopiar">Copiar link</button>
+        <button class="btn btn-texto" data-volver>Volver al inicio</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="pantalla" id="pAyuda" hidden>
+    <div class="tarjeta tarjeta-ayuda">
+      <h2>Cómo se juega</h2>
+      <ol>
+        <li><b>Diseñá.</b> En el laboratorio elegí la cabeza (cómo ataca), el torso (cuánto aguanta) y las patas (qué tan rápido va) de tres animales.</li>
+        <li><b>Desplegá.</b> Tocá una casilla de tu zona para poner la bestia. Arrastrala para moverla. Reciclar devuelve toda la biomasa.</li>
+        <li><b>Mirá el combate.</b> Cada bestia ataca sola al enemigo más cercano.</li>
+        <li><b>Contrarrestá.</b> Tu ejército se queda entre rondas y cada ronda recibís más biomasa. Mientras desplegás ves lo que el rival puso la ronda pasada.</li>
+        <li><b>Ganá.</b> El que pierde la ronda pierde vida según cuántas bestias rivales sobrevivieron. Gana quien deja al otro en cero.</li>
+      </ol>
+      <p class="pista">Pistas: el caparazón de tortuga frena a los mordiscos rápidos; el veneno ignora la armadura; los lobos alcanzan a los que atacan de lejos.</p>
+      <div class="acciones"><button class="btn btn-principal" data-volver>Entendido</button></div>
+    </div>
+  </section>
+
+  <script src="src/data/animales.js"></script>
+  <script src="src/core/base.js"></script>
+  <script src="src/core/criatura.js"></script>
+  <script src="src/core/simulacion.js"></script>
+  <script src="src/core/partida.js"></script>
+  <script src="src/core/ia.js"></script>
+  <script src="src/render/bestias.js"></script>
+  <script src="src/render/campo.js"></script>
+  <script src="src/ui/juego.js"></script>
+</body>
+</html>
