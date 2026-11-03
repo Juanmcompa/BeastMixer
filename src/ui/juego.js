@@ -21,12 +21,16 @@
     vida: [R.vidaJugador, R.vidaJugador], nombres: ['Vos', 'IA'],
     ejercito: [], rivalVisto: [],
     ia: null, duelo: null,
-    diseno: { cab: 'lobo', tor: 'lobo', pat: 'lobo' },
+    // "Mis bestias": diseños de la partida (sin repetir). `mezcla` es lo que se ve en el
+    // laboratorio; `diseno` es el diseño elegido para desplegar (o null si no hay).
+    disenos: [], mezcla: { cab: 'lobo', tor: 'lobo', pat: 'lobo' }, diseno: null,
+    vista: 'campo',
     sel: null, hover: null, arrastre: null,
     combate: null, vel: 1, efectos: [], fases: {}
   };
 
   var render, ultimoT = 0;
+  var MOVIL = '(max-width: 860px)';
 
   // ── utilidades ───────────────────────────────────────────────────────────
   function copiarEj(ej) { return ej.map(function (u) { return { cab: u.cab, tor: u.tor, pat: u.pat, col: u.col, prof: u.prof }; }); }
@@ -94,13 +98,15 @@
         b.dataset.parte = p.clave;
         b.dataset.animal = a.id;
         b.title = p.titulo + ' de ' + a.nombre;
+        b.setAttribute('aria-label', p.titulo + ' de ' + a.nombre);
         b.appendChild(icono(p.id, a.id));
         var nom = document.createElement('span');
         nom.textContent = a.nombre;
         b.appendChild(nom);
         b.addEventListener('click', function () {
-          J.diseno[p.clave] = a.id;
-          J.sel = null;
+          // si había una bestia seleccionada en el campo, se parte de su diseño
+          if (J.sel) { J.mezcla = { cab: J.sel.cab, tor: J.sel.tor, pat: J.sel.pat }; J.sel = null; }
+          J.mezcla[p.clave] = a.id;
           actualizarLab();
         });
         fila.appendChild(b);
@@ -157,13 +163,19 @@
   }
 
   function actualizarLab() {
-    var d = J.sel ? J.sel : J.diseno;
+    var d = J.sel ? J.sel : J.mezcla;
     var s = BM.ensamblar(d.cab, d.tor, d.pat);
     var cvL = $('lamina');
     var dpr = Math.min(2, window.devicePixelRatio || 1);
-    if (cvL.width !== 320 * dpr) { cvL.width = 320 * dpr; cvL.height = 230 * dpr; }
-    var compacto = window.matchMedia && window.matchMedia('(max-width: 860px)').matches;
-    dibujarLamina(cvL.getContext('2d'), 320, 230, dpr, d, { sinCotas: compacto });
+    // en celular la lámina es más baja, para que entren los selectores de partes sin desplazar
+    var alto = window.matchMedia && window.matchMedia(MOVIL).matches ? 200 : 230;
+    if (cvL.width !== 320 * dpr || cvL.height !== alto * dpr) {
+      cvL.width = 320 * dpr; cvL.height = alto * dpr;
+      cvL.style.aspectRatio = '320 / ' + alto;
+    }
+    // las cotas necesitan lugar: sin ellas si la lámina se ve muy chica
+    var compacto = cvL.clientWidth > 0 && cvL.clientWidth < 300;
+    dibujarLamina(cvL.getContext('2d'), 320, alto, dpr, d, { sinCotas: compacto });
 
     $('especie').textContent = s.nombre;
     var libre = biomasaLibre();
@@ -185,20 +197,208 @@
     for (var i = 0; i < botones.length; i++) {
       var b = botones[i];
       b.setAttribute('aria-pressed', d[b.dataset.parte] === b.dataset.animal ? 'true' : 'false');
-      b.disabled = !!J.sel;
     }
 
+    // botón principal del laboratorio
+    var btnG = $('btnGuardar');
+    btnG.textContent = buscarDiseno(d) ? 'Usar esta bestia' : 'Guardar en mis bestias';
+    btnG.disabled = J.fase !== 'draft' || !!J.sel;
+
+    // barra de acción del campo: pista, o acciones sobre la bestia seleccionada
     if (J.sel) {
       mostrar('seleccion', true);
-      $('seleccionTexto').textContent = s.nombre + ' en ' + nombreCelda(J.sel.col, J.sel.prof) + '. Arrastrala para moverla.';
+      $('seleccionTexto').textContent = s.nombre + ' en ' + nombreCelda(J.sel.col, J.sel.prof);
       $('btnReciclar').textContent = 'Reciclar (+' + s.costo + ')';
       $('btnReciclar').disabled = J.fase !== 'draft';
       mostrar('pista', false);
     } else {
       mostrar('seleccion', false);
-      mostrar('pista', J.fase === 'draft');
+      mostrar('pista', true);
+      $('pista').textContent = textoPista();
     }
+    actualizarBestias();
     actualizarBarra();
+  }
+
+  function textoPista() {
+    if (J.fase !== 'draft') return '';
+    if (!J.disenos.length) return 'Todavía no tenés bestias. Armá la primera en el laboratorio.';
+    if (!J.diseno) return 'Elegí una de tus bestias para desplegarla.';
+    var sd = BM.ensamblar(J.diseno.cab, J.diseno.tor, J.diseno.pat);
+    return 'Tocá una casilla de tu zona para poner ' + sd.nombre + '.';
+  }
+
+  // ── Mis bestias ──────────────────────────────────────────────────────────
+  function claveDiseno(d) { return d.cab + '|' + d.tor + '|' + d.pat; }
+  function buscarDiseno(d) {
+    var k = claveDiseno(d);
+    for (var i = 0; i < J.disenos.length; i++) if (claveDiseno(J.disenos[i]) === k) return J.disenos[i];
+    return null;
+  }
+  function disenoValido(d) {
+    return !!d && [d.cab, d.tor, d.pat].every(function (id) { return BM.ANIMALES.some(function (a) { return a.id === id; }); });
+  }
+  // Suma un diseño al plantel (si ya estaba, devuelve el existente).
+  function agregarDiseno(d, sinGuardar) {
+    var e = buscarDiseno(d);
+    if (!e) {
+      e = { cab: d.cab, tor: d.tor, pat: d.pat };
+      J.disenos.push(e);
+      if (!sinGuardar) guardarDisenos();
+    }
+    return e;
+  }
+  // Todo diseño que ya está desplegado tiene que figurar en el plantel.
+  function sembrarDisenos(ej) {
+    var antes = J.disenos.length;
+    ej.forEach(function (u) { agregarDiseno(u, true); });
+    if (J.disenos.length !== antes) guardarDisenos();
+  }
+  function copiasDesplegadas(d) {
+    var k = claveDiseno(d), n = 0;
+    J.ejercito.forEach(function (u) { if (claveDiseno(u) === k) n++; });
+    return n;
+  }
+  // El link del duelo no guarda el plantel: se recuerda en este navegador por duelo.
+  function guardarDisenos() {
+    if (J.modo !== 'duelo' || !J.duelo) return;
+    var todo = leerLocal('bm-bestias', {});
+    delete todo[J.duelo.s];
+    todo[J.duelo.s] = J.disenos.map(function (d) { return { cab: d.cab, tor: d.tor, pat: d.pat }; });
+    Object.keys(todo).slice(0, -12).forEach(function (k) { delete todo[k]; });
+    guardarLocal('bm-bestias', todo);
+  }
+  function cargarDisenos() {
+    var lista = J.modo === 'duelo' && J.duelo ? leerLocal('bm-bestias', {})[J.duelo.s] : null;
+    J.disenos = [];
+    if (Array.isArray(lista)) lista.forEach(function (d) { if (disenoValido(d)) agregarDiseno(d, true); });
+  }
+  function reiniciarDisenos() {
+    J.disenos = []; J.diseno = null;
+    J.mezcla = { cab: 'lobo', tor: 'lobo', pat: 'lobo' };
+  }
+
+  // Elige un diseño del plantel para desplegar; el laboratorio lo muestra.
+  function restaurarAviso() { if (J.fase === 'draft' && J.avisoRonda) $('aviso').textContent = J.avisoRonda; }
+  function elegirDiseno(d) {
+    restaurarAviso();
+    var e = buscarDiseno(d) || agregarDiseno(d);
+    J.diseno = e;
+    J.mezcla = { cab: e.cab, tor: e.tor, pat: e.pat };
+    J.sel = null;
+    actualizarLab();
+  }
+
+  function guardarMezcla() {
+    if (J.fase !== 'draft') return;
+    elegirDiseno(J.mezcla);
+    irAVista('campo');
+    var card = $('bestiasLista').querySelector('.bestia[aria-pressed="true"]');
+    if (card) mostrarCarta(card);
+  }
+
+  function mostrarCarta(card) {
+    var l = $('bestiasLista');
+    var x0 = card.offsetLeft - l.offsetLeft, x1 = x0 + card.offsetWidth;
+    if (x0 < l.scrollLeft) l.scrollLeft = Math.max(0, x0 - 8);
+    else if (x1 > l.scrollLeft + l.clientWidth) l.scrollLeft = x1 - l.clientWidth + 8;
+  }
+
+  function dibujarMiniatura(cv, d) {
+    var dpr = Math.min(2, window.devicePixelRatio || 1);
+    var W = 64, H = 52;
+    if (cv.width !== W * dpr) { cv.width = W * dpr; cv.height = H * dpr; }
+    var ctx = cv.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    var s = BM.ensamblar(d.cab, d.tor, d.pat);
+    var caja = BM.cajaBestia(s);
+    var esc = Math.min(3, (W - 6) / (caja.x1 - caja.x0), (H - 6) / (caja.y1 - caja.y0));
+    ctx.save();
+    ctx.translate(W / 2 - (caja.x0 + caja.x1) / 2 * esc, H / 2 - (caja.y0 + caja.y1) / 2 * esc);
+    ctx.scale(esc, esc);
+    BM.dibujarBestia(ctx, 0, 0, s, { fase: 0.6, sinSombra: true });
+    ctx.restore();
+  }
+
+  function crearCarta(d) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'bestia';
+    b.dataset.clave = claveDiseno(d);
+    b.innerHTML =
+      '<span class="bestia-img"><canvas aria-hidden="true"></canvas><span class="bestia-n" hidden></span></span>' +
+      '<span class="bestia-txt"><span class="bestia-nombre"></span><span class="bestia-costo"></span></span>';
+    b.addEventListener('click', function () { if (J.fase === 'draft') elegirDiseno(d); });
+    return b;
+  }
+
+  function actualizarBestias() {
+    var lista = $('bestiasLista');
+    var claves = J.disenos.map(claveDiseno).join(',');
+    if (lista.dataset.claves !== claves) {
+      var enfocada = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.clave : null;
+      lista.innerHTML = '';
+      J.disenos.forEach(function (d) { lista.appendChild(crearCarta(d)); });
+      if (!J.disenos.length) {
+        var p = document.createElement('p');
+        p.className = 'bestias-vacio';
+        p.textContent = 'Acá van a aparecer las bestias que armes.';
+        lista.appendChild(p);
+      }
+      var nueva = document.createElement('button');
+      nueva.type = 'button';
+      nueva.className = 'bestia bestia-nueva';
+      nueva.innerHTML = '<span class="bestia-mas" aria-hidden="true">+</span><span class="bestia-nombre">Nueva bestia</span>';
+      nueva.setAttribute('aria-label', 'Nueva bestia: abrir el laboratorio');
+      nueva.addEventListener('click', function () { irAVista('lab', true); });
+      lista.appendChild(nueva);
+      lista.dataset.claves = claves;
+      if (enfocada) { var f = lista.querySelector('[data-clave="' + enfocada + '"]'); if (f) f.focus(); }
+    }
+    var libre = biomasaLibre();
+    var cartas = lista.querySelectorAll('.bestia[data-clave]');
+    for (var i = 0; i < cartas.length; i++) {
+      var d = J.disenos[i], c = cartas[i];
+      var s = BM.ensamblar(d.cab, d.tor, d.pat);
+      var n = copiasDesplegadas(d);
+      var elegida = !!J.diseno && claveDiseno(J.diseno) === c.dataset.clave;
+      c.setAttribute('aria-pressed', elegida ? 'true' : 'false');
+      c.disabled = J.fase !== 'draft';
+      c.classList.toggle('sin-biomasa', s.costo > libre);
+      c.setAttribute('aria-label', s.nombre + '. Cuesta ' + s.costo + ' de biomasa.' + (n ? ' ' + n + (n === 1 ? ' desplegada.' : ' desplegadas.') : ''));
+      c.querySelector('.bestia-nombre').textContent = s.nombre;
+      c.querySelector('.bestia-costo').innerHTML = '<b>' + s.costo + '</b> biomasa';
+      var bn = c.querySelector('.bestia-n');
+      bn.hidden = !n;
+      bn.textContent = '×' + n;
+      bn.title = n + (n === 1 ? ' desplegada' : ' desplegadas');
+      dibujarMiniatura(c.querySelector('canvas'), d);
+    }
+  }
+
+  // ── Vistas: laboratorio / campo ──────────────────────────────────────────
+  // En celular son dos pantallas; en escritorio se ven las dos y esto sólo marca cuál tiene el foco.
+  function ajustarCampo() {
+    var cont = $('campo').parentElement;
+    if (cont.clientWidth > 0 && cont.clientHeight > 0) render.ajustar();
+  }
+
+  function irAVista(v, abrirLab) {
+    if (v === 'lab' && J.sel) { J.mezcla = { cab: J.sel.cab, tor: J.sel.tor, pat: J.sel.pat }; }
+    J.vista = v;
+    if (v === 'lab') { J.sel = null; J.arrastre = null; }
+    $('mesa').dataset.vista = v;
+    Array.prototype.forEach.call(document.querySelectorAll('.pestana'), function (b) {
+      b.setAttribute('aria-pressed', b.dataset.vista === v ? 'true' : 'false');
+    });
+    actualizarLab();
+    requestAnimationFrame(ajustarCampo);
+    if (abrirLab) {
+      $('lab').scrollTop = 0;
+      var movil = window.matchMedia && window.matchMedia(MOVIL).matches;
+      if (!movil) { var o = document.querySelector('.opcion[aria-pressed="true"]'); if (o) o.focus(); }
+    }
   }
 
   function actualizarBarra() {
@@ -220,8 +420,8 @@
   // ── Fases ────────────────────────────────────────────────────────────────
   function entrarJuego() {
     pantalla(null);
-    mostrar('marcador', true); mostrar('btnCombatir', true); mostrar('mesa', true);
-    requestAnimationFrame(function () { render.ajustar(); });
+    mostrar('marcador', true); mostrar('btnCombatir', true); mostrar('mesa', true); mostrar('pestanas', true);
+    requestAnimationFrame(ajustarCampo);
   }
 
   function iniciarDraft() {
@@ -229,12 +429,17 @@
     J.sel = null; J.efectos = []; J.combate = null;
     $('velocidades').classList.add('oculto');
     document.body.classList.remove('en-combate');
-    requestAnimationFrame(function () { render.ajustar(); });
+    // lo desplegado siempre figura en "Mis bestias"; si todavía no hay ninguna, se empieza por el laboratorio
+    sembrarDisenos(J.ejercito);
+    if ((!J.diseno || !buscarDiseno(J.diseno)) && J.disenos.length) J.diseno = J.disenos[0];
+    if (!J.disenos.length) J.diseno = null;
     var aviso = J.rivalVisto.length
       ? 'Ronda ' + J.ronda + '. Arriba, en tenue, está lo que ' + rivalTexto() + ' desplegó la ronda pasada. Puede sumar más.'
       : 'Ronda ' + J.ronda + '. El rival todavía no mostró su ejército. Desplegá en tu zona, abajo.';
+    J.avisoRonda = aviso;
     $('aviso').textContent = aviso;
-    actualizarLab();
+    irAVista(J.disenos.length ? 'campo' : 'lab');
+    requestAnimationFrame(ajustarCampo);
   }
 
   function iniciarCombate(ejA, ejB, semilla, alTerminar) {
@@ -242,10 +447,11 @@
     J.sel = null; J.arrastre = null; J.efectos = []; J.fases = {};
     J.combate = { c: BM.crearCombate(ejA, ejB, semilla), acum: 0, fin: null, alTerminar: alTerminar };
     document.body.classList.add('en-combate');
-    requestAnimationFrame(function () { render.ajustar(); });
+    J.vista = 'campo'; $('mesa').dataset.vista = 'campo';
     $('velocidades').classList.remove('oculto');
     $('aviso').textContent = 'Combate de la ronda ' + J.ronda + '.';
     actualizarLab();
+    requestAnimationFrame(ajustarCampo);
   }
 
   function procesarEventos(evs) {
@@ -334,6 +540,7 @@
     J.vida = [R.vidaJugador, R.vidaJugador];
     J.nombres = ['Vos', 'IA'];
     J.ejercito = []; J.rivalVisto = [];
+    reiniciarDisenos();
     J.ia = { ej: [], visto: [], semilla: (Math.random() * 1e9) >>> 0 };
     entrarJuego();
     iniciarDraft();
@@ -391,6 +598,7 @@
     J.modo = 'duelo';
     J.duelo = BM.nuevoDuelo(nombre);
     J.miBando = 0;
+    reiniciarDisenos();
     guardarLado();
     J.nombres = [nombre, ''];
     draftDuelo(1);
@@ -457,6 +665,8 @@
   function abrirDuelo(d) {
     J.modo = 'duelo';
     J.duelo = d;
+    reiniciarDisenos();
+    cargarDisenos();
     var est = BM.estadoDuelo(d);
     var lados = leerLocal('bm-duelos', {});
     var mio = lados[d.s];
@@ -478,6 +688,8 @@
       J.rivalVisto = [];
       J.fase = 'esperando';
       $('aviso').textContent = 'Le toca a ' + (J.nombres[1 - mio] || 'tu rival') + '.';
+      sembrarDisenos(J.ejercito);
+      J.vista = 'campo'; $('mesa').dataset.vista = 'campo';
       actualizarLab();
       compartir('Le toca a ' + (J.nombres[1 - mio] || 'tu rival'), 'Este link es tuyo: ya jugaste tu ronda. Mandáselo a tu rival si todavía no lo hiciste.');
       return;
@@ -519,7 +731,7 @@
   function volverInicio() {
     J.fase = 'inicio'; J.combate = null;
     try { history.replaceState(null, '', location.href.split('#')[0]); } catch (e) { /* iframe */ }
-    mostrar('marcador', false); mostrar('btnCombatir', false); mostrar('mesa', false);
+    mostrar('marcador', false); mostrar('btnCombatir', false); mostrar('mesa', false); mostrar('pestanas', false);
     document.body.classList.remove('en-combate');
     pantalla('pInicio');
   }
@@ -532,13 +744,18 @@
   }
 
   function desplegar(col, prof) {
+    if (!J.diseno) {
+      $('aviso').textContent = J.disenos.length ? 'Elegí una de tus bestias para desplegarla.' : 'Primero armá una bestia en el laboratorio y guardala.';
+      return;
+    }
     var s = BM.ensamblar(J.diseno.cab, J.diseno.tor, J.diseno.pat);
     var libre = biomasaLibre();
     if (s.costo > libre) {
-      $('aviso').textContent = 'Te falta biomasa: ' + s.nombre + ' cuesta ' + s.costo + ' y te quedan ' + libre + '. Reciclá algo o elegí partes más baratas.';
+      $('aviso').textContent = 'Te falta biomasa: ' + s.nombre + ' cuesta ' + s.costo + ' y te quedan ' + libre + '. Reciclá algo o elegí otra bestia.';
       return;
     }
     J.ejercito.push({ cab: J.diseno.cab, tor: J.diseno.tor, pat: J.diseno.pat, col: col, prof: prof });
+    restaurarAviso();
     actualizarLab();
   }
 
@@ -580,6 +797,7 @@
   function reciclar() {
     if (!J.sel || J.fase !== 'draft') return;
     J.ejercito = J.ejercito.filter(function (u) { return u !== J.sel; });
+    restaurarAviso();
     J.sel = null;
     actualizarLab();
   }
@@ -609,7 +827,7 @@
       var ocupada = BM.celdaOcupada(J.ejercito, h.c.col, h.c.prof, J.arrastre ? J.arrastre.u : null);
       if (J.arrastre) {
         esc.celda = { x: pc.x, y: pc.y, valida: true };
-      } else if (!ocupada && !J.sel) {
+      } else if (!ocupada && !J.sel && J.diseno) {
         var s = BM.ensamblar(J.diseno.cab, J.diseno.tor, J.diseno.pat);
         esc.fantasma = { x: pc.x, y: pc.y, b: s, valido: s.costo <= biomasaLibre() };
       }
@@ -714,10 +932,20 @@
     $('btnReciclar').addEventListener('click', reciclar);
     $('btnCopiar').addEventListener('click', function () {
       if (!J.sel) return;
-      J.diseno = { cab: J.sel.cab, tor: J.sel.tor, pat: J.sel.pat };
-      J.sel = null;
-      actualizarLab();
+      elegirDiseno(J.sel);
     });
+    $('btnGuardar').addEventListener('click', guardarMezcla);
+    Array.prototype.forEach.call(document.querySelectorAll('.pestana'), function (b) {
+      b.addEventListener('click', function () { irAVista(b.dataset.vista); });
+    });
+    // el tablero cambia de tamaño al cambiar de pantalla, al entrar/salir del combate, al girar el celular...
+    if (window.ResizeObserver) {
+      var ult = '';
+      new ResizeObserver(function () {
+        var c = $('campo').parentElement, k = c.clientWidth + 'x' + c.clientHeight;
+        if (k !== ult) { ult = k; ajustarCampo(); }
+      }).observe($('campo').parentElement);
+    }
     $('compCopiar').addEventListener('click', function () {
       var inp = $('compLink');
       inp.select();
@@ -744,7 +972,7 @@
       if ((e.key === 'Delete' || e.key === 'Backspace') && J.sel) { e.preventDefault(); reciclar(); }
       if (e.key === 'Escape' && J.sel) { J.sel = null; actualizarLab(); }
     });
-    window.addEventListener('resize', function () { if (!$('mesa').hidden) render.ajustar(); actualizarLab(); });
+    window.addEventListener('resize', function () { if (!$('mesa').hidden) ajustarCampo(); actualizarLab(); });
 
     // ¿Llegó un link de duelo?
     var m = location.hash.match(/#d=([A-Za-z0-9_-]+)/);
