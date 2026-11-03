@@ -191,12 +191,14 @@ h1, h2 { font-family: var(--display); margin: 0; font-weight: 800; letter-spacin
   .vidas { min-width: 0; flex: 1; }
   .vida { grid-template-columns: 64px 1fr 28px; }
   #btnCombatir { margin-left: auto; min-height: 40px; }
-  /* tablero fijo arriba, laboratorio desplazable abajo: no hace falta scrollear para desplegar */
+  /* tablero arriba a todo el ancho, laboratorio desplazable abajo */
   .mesa { display: flex; flex-direction: column; }
-  .tablero { flex: 0 0 auto; height: 58%; padding: 6px 16px 4px; gap: 4px; }
-  .en-combate .tablero { height: 100%; }
+  .tablero { flex: none; padding: 4px 10px 4px; gap: 4px; }
+  .lienzo { flex: none; width: 100%; aspect-ratio: 3 / 4; max-height: 66dvh; }
+  .en-combate .tablero { flex: 1; min-height: 0; }
+  .en-combate .lienzo { flex: 1; aspect-ratio: auto; max-height: none; min-height: 0; }
   .en-combate .lab { display: none; }
-  .aviso { font-size: 12.5px; min-height: 0; line-height: 1.3; }
+  .aviso { font-size: 12.5px; min-height: 0; line-height: 1.3; padding: 0 6px; }
   .velocidades .btn-chico { min-height: 30px; }
   .lab { flex: 1; min-height: 0; border-left: 0; border-top: 1px solid var(--papel-linea); padding-top: 10px; }
   .lamina { display: grid; grid-template-columns: 150px 1fr; align-items: center; }

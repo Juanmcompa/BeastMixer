@@ -229,6 +229,7 @@
     J.sel = null; J.efectos = []; J.combate = null;
     $('velocidades').classList.add('oculto');
     document.body.classList.remove('en-combate');
+    requestAnimationFrame(function () { render.ajustar(); });
     var aviso = J.rivalVisto.length
       ? 'Ronda ' + J.ronda + '. Arriba, en tenue, está lo que ' + rivalTexto() + ' desplegó la ronda pasada. Puede sumar más.'
       : 'Ronda ' + J.ronda + '. El rival todavía no mostró su ejército. Desplegá en tu zona, abajo.';
@@ -241,6 +242,7 @@
     J.sel = null; J.arrastre = null; J.efectos = []; J.fases = {};
     J.combate = { c: BM.crearCombate(ejA, ejB, semilla), acum: 0, fin: null, alTerminar: alTerminar };
     document.body.classList.add('en-combate');
+    requestAnimationFrame(function () { render.ajustar(); });
     $('velocidades').classList.remove('oculto');
     $('aviso').textContent = 'Combate de la ronda ' + J.ronda + '.';
     actualizarLab();
@@ -632,7 +634,7 @@
       J.efectos[i].t -= dt * J.vel;
       if (J.efectos[i].t <= 0) J.efectos.splice(i, 1);
     }
-    return { girar: J.miBando === 1, unidades: unidades, efectos: J.efectos };
+    return { girar: J.miBando === 1, unidades: unidades, efectos: J.efectos, camaraAuto: true };
   }
 
   function cuadro(ts) {

@@ -39,16 +39,59 @@
       canvas.height = Math.floor(H * escala * dpr);
     }
 
-    // Pantalla → coordenadas del mundo (respeta la vista girada del jugador B)
+    // Cámara: centro (x, y) y zoom z. En pantallas chicas sigue la pelea durante el combate.
+    var cam = { x: W / 2, y: H / 2, z: 1 };
+    var ZOOM_MAX = 2.1;
+
+    function objetivoCamara(escena) {
+      var chica = canvas.clientWidth > 0 && canvas.clientWidth < 560;
+      if (!escena.camaraAuto || !chica) return { x: W / 2, y: H / 2, z: 1 };
+      var x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity, n = 0;
+      (escena.unidades || []).forEach(function (u) {
+        if (u.o && u.o.muerta) return;
+        n++;
+        if (u.x < x0) x0 = u.x; if (u.x > x1) x1 = u.x;
+        if (u.y < y0) y0 = u.y; if (u.y > y1) y1 = u.y;
+      });
+      if (!n) return { x: cam.x, y: cam.y, z: cam.z };
+      var margen = 70;
+      var z = Math.min(W / (x1 - x0 + margen * 2), H / (y1 - y0 + margen * 2));
+      z = Math.max(1, Math.min(ZOOM_MAX, z));
+      return { x: (x0 + x1) / 2, y: (y0 + y1) / 2, z: z };
+    }
+
+    function moverCamara(escena) {
+      var obj = objetivoCamara(escena);
+      var k = escena.camaraAuto ? 0.06 : 0.25;
+      cam.z += (obj.z - cam.z) * k;
+      cam.x += (obj.x - cam.x) * k;
+      cam.y += (obj.y - cam.y) * k;
+      if (Math.abs(cam.z - 1) < 0.002 && !escena.camaraAuto) { cam.z = 1; cam.x = W / 2; cam.y = H / 2; }
+      // que la vista no se salga del mapa
+      var mx = W / (2 * cam.z), my = H / (2 * cam.z);
+      cam.x = Math.max(mx, Math.min(W - mx, cam.x));
+      cam.y = Math.max(my, Math.min(H - my, cam.y));
+    }
+
+    // Pantalla → coordenadas del mundo (respeta la vista girada del jugador B y la cámara)
     function aMundo(clientX, clientY, girar) {
       var rect = canvas.getBoundingClientRect();
       var x = (clientX - rect.left) / rect.width * W;
       var y = (clientY - rect.top) / rect.height * H;
       if (girar) { x = W - x; y = H - y; }
-      return { x: x, y: y };
+      return { x: (x - W / 2) / cam.z + cam.x, y: (y - H / 2) / cam.z + cam.y };
     }
 
-    function aPantalla(x, y, girar) { return girar ? { x: W - x, y: H - y } : { x: x, y: y }; }
+    function aPantalla(x, y, girar) {
+      var sx = (x - cam.x) * cam.z + W / 2, sy = (y - cam.y) * cam.z + H / 2;
+      return girar ? { x: W - sx, y: H - sy } : { x: sx, y: sy };
+    }
+
+    function transformarMundo(girar) {
+      var b = dpr * escala, z = cam.z;
+      if (girar) ctx.setTransform(-b * z, 0, 0, -b * z, b * (W / 2 + cam.x * z), b * (H / 2 + cam.y * z));
+      else ctx.setTransform(b * z, 0, 0, b * z, b * (W / 2 - cam.x * z), b * (H / 2 - cam.y * z));
+    }
 
     function dibujarFondo(escena) {
       if (!mapa) return dibujarFondoPlano(escena);
@@ -133,8 +176,10 @@
     }
 
     function dibujar(escena) {
-      ctx.setTransform(dpr * escala, 0, 0, dpr * escala, 0, 0);
-      if (escena.girar) ctx.setTransform(-dpr * escala, 0, 0, -dpr * escala, W * dpr * escala, H * dpr * escala);
+      moverCamara(escena);
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.fillStyle = '#132c4f'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      transformarMundo(escena.girar);
       dibujarFondo(escena);
 
       var i, u;
@@ -157,7 +202,8 @@
         var p = aPantalla(u.x, u.y, escena.girar);
         ctx.save();
         ctx.setTransform(dpr * escala, 0, 0, dpr * escala, 0, 0);
-        var ancho = Math.max(18, u.b.radio * 2.2), yb = p.y - u.b.radio * 1.38 * ESCALA_VISUAL - 6;
+        var ev = BM.spritesListos && BM.spritesListos() ? 1.15 : ESCALA_VISUAL;
+        var ancho = Math.max(18, u.b.radio * 2.2) * Math.sqrt(cam.z), yb = p.y - u.b.radio * 1.38 * ev * cam.z - 6;
         ctx.fillStyle = 'rgba(8,20,40,0.75)'; ctx.fillRect(p.x - ancho / 2 - 1, yb - 1, ancho + 2, 5);
         ctx.fillStyle = u.o.equipo; ctx.fillRect(p.x - ancho / 2, yb, ancho * Math.max(0, u.vida / u.b.vida), 3);
         if (u.veneno) {
@@ -214,7 +260,7 @@
         ctx.save();
         ctx.setTransform(dpr * escala, 0, 0, dpr * escala, 0, 0);
         ctx.globalAlpha = Math.min(1, a * 1.5);
-        ctx.font = '700 11px "Atkinson Hyperlegible", system-ui, sans-serif';
+        ctx.font = '700 ' + Math.round(11 * Math.sqrt(cam.z)) + 'px "Atkinson Hyperlegible", system-ui, sans-serif';
         ctx.textAlign = 'center';
         ctx.fillStyle = e.color;
         ctx.fillText(e.texto, p.x, p.y - (1 - a) * 18);

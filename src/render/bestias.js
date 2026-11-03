@@ -337,12 +337,18 @@
   var PATA_ESCALA = 0.5;   // las patas vistas desde arriba quedan más cortas
   var CABEZA_MAX = 1.3;     // la cabeza no puede ser más ancha que 1.3 × el torso
 
-  // Ángulos de las patas del lado izquierdo (radianes; 180° = hacia adelante).
-  var PATAS_POR_ANIMAL = {
-    arana: [[2.8, 0, 'pataDel'], [2.25, 0.33, 'pataDel'], [1.25, 0.66, 'pataTras'], [0.6, 1, 'pataTras']],
-    escorpion: [[2.4, 0, 'pataDel'], [1.6, 0.5, 'pataTras'], [0.8, 1, 'pataTras']]
+  // Cómo apoya cada animal las patas, lado izquierdo (radianes; π = hacia adelante).
+  // [ángulo, posición entre hombro (0) y cadera (1), pieza, largo visible]
+  // Reptantes (tortuga, rana, araña, escorpión): patas abiertas a los costados, panza cerca del piso.
+  // Erguidos (lobo, rino, elefante, puercoespín): patas debajo del cuerpo; desde arriba sólo
+  // asoman adelante y atrás al dar el paso.
+  var POSTURA = {
+    arana: { patas: [[2.8, 0, 'pataDel', 1], [2.25, 0.33, 'pataDel', 1], [1.25, 0.66, 'pataTras', 1], [0.6, 1, 'pataTras', 1]], paso: 0.3, borde: 1 },
+    escorpion: { patas: [[2.4, 0, 'pataDel', 1], [1.6, 0.5, 'pataTras', 1], [0.8, 1, 'pataTras', 1]], paso: 0.3, borde: 1 },
+    tortuga: { patas: [[2.45, 0, 'pataDel', 1], [0.7, 1, 'pataTras', 1]], paso: 0.25, borde: 1 },
+    rana: { patas: [[2.55, 0, 'pataDel', 1], [0.6, 1, 'pataTras', 1]], paso: 0.3, borde: 1 }
   };
-  var PATAS_NORMAL = [[2.55, 0, 'pataDel'], [0.6, 1, 'pataTras']];
+  var ERGUIDO = { patas: [[2.9, -0.05, 'pataDel', 0.62], [0.25, 1.05, 'pataTras', 0.62]], paso: 0.5, borde: 1.12 };
 
   // Escala y posiciones de una bestia armada con sprites, en unidades de r.
   function geometria(b) {
@@ -369,20 +375,22 @@
   function dibujarConArte(ctx, b, o) {
     var g = geometria(b);
     var fase = o.fase || 0;
-    var lista = PATAS_POR_ANIMAL[b.pat] || PATAS_NORMAL;
+    var post = POSTURA[b.pat] || ERGUIDO;
+    var lista = post.patas;
     // patas (debajo de todo), lado izquierdo y espejadas a la derecha
     for (var lado = -1; lado <= 1; lado += 2) {
       for (var i = 0; i < lista.length; i++) {
         var L = lista[i];
         var info = g.P[L[2]];
         var t = L[1];
-        var px = -(g.hombro.x + (g.cadera.x - g.hombro.x) * t);
+        var px = -(g.hombro.x + (g.cadera.x - g.hombro.x) * t) * post.borde;
         var py = g.hombro.y + (g.cadera.y - g.hombro.y) * t;
-        var paso = Math.sin(fase + (i % 2 ? Math.PI : 0) + (lado > 0 ? Math.PI : 0)) * 0.32;
+        var paso = Math.sin(fase + (i % 2 ? Math.PI : 0) + (lado > 0 ? Math.PI : 0)) * post.paso;
         ctx.save();
         ctx.scale(lado < 0 ? 1 : -1, 1);
         ctx.translate(px, py);
-        ctx.rotate(L[0] + paso);
+        ctx.rotate(L[0] + paso * (L[0] > 1.57 ? -1 : 1));
+        ctx.scale(1, L[3]);
         pieza(ctx, IMG[b.pat + '-' + L[2]], info.ancla.x, info.ancla.y, g.kL);
         ctx.restore();
       }
