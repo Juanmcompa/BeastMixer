@@ -35,17 +35,20 @@
     return { x: (R.columnas - 1 - col + 0.5) * c, y: (R.filasZona - 1 - prof + 0.5) * c };
   }
 
-  function crearCombate(ejA, ejB, semilla) {
+  // nivA / nivB (opcionales): mapas { 'cab-tor-pat': nivel } de cada jugador. Sin ellos,
+  // todas las bestias son nivel 1 (idéntico al comportamiento anterior).
+  function crearCombate(ejA, ejB, semilla, nivA, nivB) {
     var rng = BM.crearRng(semilla);
     var unidades = [];
     var ejercitos = [ejA || [], ejB || []];
+    var niveles = [nivA || {}, nivB || {}];
     // ids intercalados (A0, B0, A1, B1, ...) para que ningún bando actúe siempre primero
     var maxLen = Math.max(ejercitos[0].length, ejercitos[1].length);
     for (var i = 0; i < maxLen; i++) {
       for (var b = 0; b < 2; b++) {
         var u = ejercitos[b][i];
         if (!u) continue;
-        var s = BM.ensamblar(u.cab, u.tor, u.pat);
+        var s = BM.ensamblar(u.cab, u.tor, u.pat, BM.nivelDiseno(niveles[b], u));
         var p = posicionCelda(b, u.col, u.prof);
         unidades.push({
           id: unidades.length, bando: b, s: s,
@@ -261,7 +264,7 @@
     var porSobrevivientes = [0, 0];
     for (var i = 0; i < c.unidades.length; i++) {
       var u = c.unidades[i];
-      if (u.viva) porSobrevivientes[u.bando] += Math.ceil(u.s.costo / R.danoPorCosto);
+      if (u.viva) porSobrevivientes[u.bando] += Math.ceil(u.s.valor / R.danoPorCosto); // valor = costo × (1 + 0.5 × (nivel − 1))
     }
     var dano = [0, 0];
     if (c.ganador === 0) dano[1] = R.danoBaseDerrota + porSobrevivientes[0];
@@ -270,8 +273,8 @@
     return dano;
   }
 
-  function resolver(ejA, ejB, semilla) {
-    var c = crearCombate(ejA, ejB, semilla);
+  function resolver(ejA, ejB, semilla, nivA, nivB) {
+    var c = crearCombate(ejA, ejB, semilla, nivA, nivB);
     var pasos = 0;
     while (!c.terminado) { paso(c); pasos++; }
     return {

@@ -102,7 +102,14 @@
     columnas: 12,
     filasZona: 6,             // filas de despliegue por jugador
     filasNeutras: 4,
-    celda: 40
+    celda: 40,
+    // ── Niveles por DISEÑO (cab-tor-pat) y veteranía ──────────────────────
+    nivelMax: 3,
+    multVidaNivel: [1, 1.35, 1.75],     // índice = nivel − 1
+    multDanoNivel: [1, 1.25, 1.5],
+    valorPorNivel: 0.5,                 // valor = costo × (1 + 0.5 × (nivel − 1)) → daño al jugador
+    multCostoSubirNivel: [2, 4],        // índice = nivel actual − 1; × costo base de la bestia
+    reembolsoVeterana: 0.5              // reciclar una bestia que sobrevivió de la ronda anterior devuelve el 50%
   };
 
   function porId(id) {
