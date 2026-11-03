@@ -4,6 +4,6 @@
   "private": true,
   "description": "Prototipo de auto-battler de bestias híbridas (HTML/JS, sin dependencias).",
   "scripts": {
-    "test": "node tests/sim.test.mjs && node tests/economia.test.mjs"
+    "test": "node tests/sim.test.mjs && node tests/economia.test.mjs && node tests/ia.test.mjs"
   }
 }
