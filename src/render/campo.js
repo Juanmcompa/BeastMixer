@@ -190,6 +190,21 @@
         ctx.fillRect(cc.x - R.celda / 2, cc.y - R.celda / 2, R.celda, R.celda);
       }
 
+      // zona propia teñida mientras hay una bestia lista para desplegar
+      if (escena.colocar !== undefined) {
+        var zy = R.filasZona * R.celda, ny = R.filasNeutras * R.celda;
+        ctx.fillStyle = 'rgba(244,178,62,0.07)';
+        ctx.fillRect(0, escena.colocar === 0 ? zy + ny : 0, W, zy);
+      }
+      // destello de la casilla donde se acaba de poner una bestia
+      if (escena.destello) {
+        var dd = escena.destello;
+        ctx.fillStyle = 'rgba(244,178,62,' + (0.55 * dd.a).toFixed(3) + ')';
+        ctx.fillRect(dd.x - R.celda / 2, dd.y - R.celda / 2, R.celda, R.celda);
+        ctx.strokeStyle = 'rgba(255,236,190,' + dd.a.toFixed(3) + ')'; ctx.lineWidth = 2;
+        ctx.strokeRect(dd.x - R.celda / 2 + 1, dd.y - R.celda / 2 + 1, R.celda - 2, R.celda - 2);
+      }
+
       // muertos primero (quedan debajo)
       var lista = escena.unidades || [];
       for (i = 0; i < lista.length; i++) { u = lista[i]; if (u.o && u.o.muerta) bestiaGrande(u.x, u.y, u.b, u.o); }
@@ -210,6 +225,25 @@
           ctx.fillStyle = COLOR.veneno;
           for (var k = 0; k < u.veneno; k++) { ctx.beginPath(); ctx.arc(p.x - ancho / 2 + 3 + k * 5, yb - 5, 1.8, 0, Math.PI * 2); ctx.fill(); }
         }
+        ctx.restore();
+      }
+
+      // pips de nivel bajo cada bestia (sólo nivel 2 y 3: el 1 es lo normal y ensucia el mapa)
+      for (i = 0; i < lista.length; i++) {
+        u = lista[i];
+        if (!(u.nivel >= 2) || (u.o && u.o.muerta)) continue;
+        var q = aPantalla(u.x, u.y, escena.girar);
+        var evn = BM.spritesListos && BM.spritesListos() ? 1.15 : ESCALA_VISUAL;
+        var py0 = q.y + u.b.radio * 1.38 * evn * cam.z + 4;
+        var rp = 2.3, sep = 6.2, x0p = q.x - (u.nivel - 1) * sep / 2;
+        ctx.save();
+        ctx.setTransform(dpr * escala, 0, 0, dpr * escala, 0, 0);
+        if (u.o && u.o.alfa !== undefined) ctx.globalAlpha = Math.max(0.6, u.o.alfa);
+        ctx.fillStyle = 'rgba(8,20,40,0.78)';
+        var ancho2 = (u.nivel - 1) * sep + rp * 2 + 4;
+        ctx.fillRect(x0p - rp - 2, py0 - rp - 1.5, ancho2, rp * 2 + 3);
+        ctx.fillStyle = (u.o && u.o.equipo) || COLOR.papel;
+        for (var n = 0; n < u.nivel; n++) { ctx.beginPath(); ctx.arc(x0p + n * sep, py0, rp, 0, Math.PI * 2); ctx.fill(); }
         ctx.restore();
       }
 

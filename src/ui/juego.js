@@ -20,6 +20,10 @@
     modo: null, fase: 'inicio', ronda: 1, miBando: 0,
     vida: [R.vidaJugador, R.vidaJugador], nombres: ['Vos', 'IA'],
     ejercito: [], rivalVisto: [],
+    // Niveles por diseño ({ 'cab-tor-pat': n }) y libro de biomasa: el estado con que cerré la ronda
+    // anterior (ejPrev, nivPrev, libreAnt) es la base contra la que se valida todo lo de esta ronda.
+    niv: {}, rivalNiv: {}, ejPrev: [], nivPrev: {}, libreAnt: 0, alerta: '',
+    dificultad: 'rival', destello: null,
     ia: null, duelo: null,
     // "Mis bestias": diseños de la partida (sin repetir). `mezcla` es lo que se ve en el
     // laboratorio; `diseno` es el diseño elegido para desplegar (o null si no hay).
@@ -34,7 +38,36 @@
 
   // ── utilidades ───────────────────────────────────────────────────────────
   function copiarEj(ej) { return ej.map(function (u) { return { cab: u.cab, tor: u.tor, pat: u.pat, col: u.col, prof: u.prof }; }); }
-  function biomasaLibre() { return BM.presupuesto(J.ronda) - BM.costoEjercito(J.ejercito); }
+  function copiarNiv(n) { var o = {}; for (var k in (n || {})) o[k] = n[k]; return o; }
+  // Biomasa libre ahora (libro de cuentas); `ej`/`niv` permiten preguntar "¿y si...?".
+  function biomasaLibre(ej, niv) {
+    return BM.biomasaLibre(J.libreAnt, J.ronda, J.ejPrev, J.nivPrev, ej || J.ejercito, niv || J.niv);
+  }
+  function nivelDe(d) { return BM.nivelDiseno(J.niv, d); }
+  // ¿Cuánta biomasa falta para sumar una copia de `d`? (0 si alcanza)
+  function faltaParaDesplegar(d) {
+    var libre = biomasaLibre(J.ejercito.concat([{ cab: d.cab, tor: d.tor, pat: d.pat, col: -1, prof: -1 }]));
+    return libre < 0 ? -libre : 0;
+  }
+  // Cierra la ronda: lo que quedó en mesa es la base de la siguiente.
+  function cerrarRonda() {
+    J.libreAnt = biomasaLibre();
+    J.ejPrev = copiarEj(J.ejercito);
+    J.nivPrev = copiarNiv(J.niv);
+  }
+  function nombreDificultad(id) {
+    var l = listaDificultades();
+    for (var i = 0; i < l.length; i++) if (l[i].id === id) return l[i].nombre;
+    return 'Rival';
+  }
+  function listaDificultades() {
+    return BM.DIFICULTADES && BM.DIFICULTADES.length ? BM.DIFICULTADES : [
+      { id: 'aprendiz', nombre: 'Aprendiz', texto: 'Arma recetas fijas.' },
+      { id: 'rival', nombre: 'Rival', texto: 'Prueba combinaciones contra tu último ejército.' },
+      { id: 'experto', nombre: 'Experto', texto: 'Anticipa tu respuesta y cuida la ubicación.' },
+      { id: 'pesadilla', nombre: 'Pesadilla', texto: 'Evoluciona su ejército ronda a ronda.' }
+    ];
+  }
   function mostrar(id, si) { $(id).hidden = !si; }
   function pantalla(id) {
     ['pInicio', 'pNombre', 'pResultado', 'pCompartir', 'pAyuda'].forEach(function (p) { mostrar(p, p === id); });
@@ -162,13 +195,21 @@
     });
   }
 
+  // Pips de nivel: ● llenos hasta `n`, ○ vacíos hasta el máximo.
+  function pipsNivel(n) {
+    var h = '';
+    for (var i = 1; i <= R.nivelMax; i++) h += '<i' + (i <= n ? ' class="on"' : '') + '></i>';
+    return h;
+  }
+
   function actualizarLab() {
     var d = J.sel ? J.sel : J.mezcla;
-    var s = BM.ensamblar(d.cab, d.tor, d.pat);
+    var nivel = nivelDe(d);
+    var s = BM.ensamblar(d.cab, d.tor, d.pat, nivel);
     var cvL = $('lamina');
     var dpr = Math.min(2, window.devicePixelRatio || 1);
     // en celular la lámina es más baja, para que entren los selectores de partes sin desplazar
-    var alto = window.matchMedia && window.matchMedia(MOVIL).matches ? 200 : 230;
+    var alto = window.matchMedia && window.matchMedia(MOVIL).matches ? 168 : 230;
     if (cvL.width !== 320 * dpr || cvL.height !== alto * dpr) {
       cvL.width = 320 * dpr; cvL.height = alto * dpr;
       cvL.style.aspectRatio = '320 / ' + alto;
@@ -178,15 +219,21 @@
     dibujarLamina(cvL.getContext('2d'), 320, alto, dpr, d, { sinCotas: compacto });
 
     $('especie').textContent = s.nombre;
-    var libre = biomasaLibre();
-    $('costo').innerHTML = '<b>' + s.costo + '</b> de biomasa' + (!J.sel && J.fase === 'draft' && s.costo > libre ? ' <em>te faltan ' + (s.costo - libre) + '</em>' : '');
+    $('nivelLab').innerHTML = '<span class="pips" aria-hidden="true">' + pipsNivel(nivel) + '</span>Nivel ' + nivel + ' de ' + R.nivelMax;
+    var falta = !J.sel && J.fase === 'draft' ? faltaParaDesplegar(d) : 0;
+    $('costo').innerHTML = '<b>' + s.costo + '</b> de biomasa' + (falta ? ' <em>te faltan ' + falta + '</em>' : '');
 
+    var alcance = s.distancia ? String(s.alcance) : 'cuerpo a cuerpo';
     $('ficha').innerHTML =
-      '<div><dt>Vida</dt><dd>' + barra(s.vida, 380) + '<b>' + s.vida + '</b></dd></div>' +
+      '<div><dt>Vida</dt><dd>' + barra(s.vida, 380 * R.multVidaNivel[R.nivelMax - 1]) + '<b>' + s.vida + '</b></dd></div>' +
       '<div><dt>Armadura</dt><dd>' + barra(s.armadura, 6) + '<b>' + s.armadura + '</b></dd></div>' +
-      '<div><dt>Daño por segundo</dt><dd>' + barra(s.dps, 18) + '<b>' + s.dps.toFixed(1) + '</b></dd></div>' +
-      '<div><dt>Alcance</dt><dd>' + barra(s.alcance, 150) + '<b>' + (s.distancia ? s.alcance : 'cuerpo a cuerpo') + '</b></dd></div>' +
+      '<div><dt>Daño por segundo</dt><dd>' + barra(s.dps, 18 * R.multDanoNivel[R.nivelMax - 1]) + '<b>' + s.dps.toFixed(1) + '</b></dd></div>' +
+      '<div><dt>Alcance</dt><dd>' + barra(s.alcance, 150) + '<b>' + alcance + '</b></dd></div>' +
       '<div><dt>Velocidad</dt><dd>' + barra(s.velocidad, 115) + '<b>' + s.velocidad + '</b></dd></div>';
+    $('resumen').innerHTML =
+      '<li>Vida <b>' + s.vida + '</b></li><li>Daño/s <b>' + s.dps.toFixed(1) + '</b></li>' +
+      '<li>Alcance <b>' + s.alcance + '</b></li><li>Veloc. <b>' + s.velocidad + '</b></li>' +
+      '<li>Arm. <b>' + s.armadura + '</b></li>';
 
     $('habilidades').innerHTML = s.habilidades.length
       ? s.habilidades.map(function (h) { var x = BM.HABILIDADES[h]; return '<li><b>' + x.nombre + '.</b> ' + x.texto + '</li>'; }).join('')
@@ -204,23 +251,63 @@
     btnG.textContent = buscarDiseno(d) ? 'Usar esta bestia' : 'Guardar en mis bestias';
     btnG.disabled = J.fase !== 'draft' || !!J.sel;
 
-    // barra de acción del campo: pista, o acciones sobre la bestia seleccionada
-    if (J.sel) {
-      mostrar('seleccion', true);
-      $('seleccionTexto').textContent = s.nombre + ' en ' + nombreCelda(J.sel.col, J.sel.prof);
-      $('btnReciclar').textContent = 'Reciclar (+' + s.costo + ')';
-      $('btnReciclar').disabled = J.fase !== 'draft';
-      mostrar('pista', false);
-    } else {
-      mostrar('seleccion', false);
-      mostrar('pista', true);
-      $('pista').textContent = textoPista();
-    }
+    actualizarAccion();
     actualizarBestias();
     actualizarBarra();
   }
 
+  // Barra de acción del campo: pista, o acciones sobre la bestia seleccionada o el diseño elegido.
+  function actualizarAccion() {
+    var enDraft = J.fase === 'draft';
+    var d = J.sel || J.diseno;
+    var notas = [];
+    var txt = $('seleccionTexto'), pista = $('pista');
+    var bSubir = $('btnSubir'), bRec = $('btnReciclar'), bCopiar = $('btnCopiar');
+
+    if (J.sel) {
+      var ss = BM.ensamblar(J.sel.cab, J.sel.tor, J.sel.pat, nivelDe(J.sel));
+      txt.textContent = ss.nombre + ' en ' + nombreCelda(J.sel.col, J.sel.prof);
+      var vet = BM.esVeterana(J.ejPrev, J.ejercito, J.sel);
+      var sin = J.ejercito.filter(function (u) { return u !== J.sel; });
+      var dev = biomasaLibre(sin) - biomasaLibre();
+      bRec.textContent = 'Reciclar (+' + dev + ')';
+      bRec.disabled = !enDraft;
+      bRec.title = vet ? 'Veterana: devuelve la mitad de su costo' : 'La compraste esta ronda: devuelve todo';
+      if (vet) notas.push('Veterana: devuelve la mitad');
+      mostrar('seleccionTexto', true); mostrar('pista', false);
+      mostrar('btnReciclar', true); mostrar('btnCopiar', true);
+    } else {
+      txt.textContent = '';
+      pista.textContent = textoPista();
+      mostrar('seleccionTexto', false); mostrar('pista', true);
+      mostrar('btnReciclar', false); mostrar('btnCopiar', false);
+    }
+    bCopiar.disabled = !enDraft;
+
+    // subir de nivel: vale para todas las copias del diseño
+    if (d && enDraft) {
+      var n = nivelDe(d), costo = BM.costoSubirNivel(d.cab, d.tor, d.pat, n), libre = biomasaLibre();
+      mostrar('btnSubir', true);
+      if (costo === null) {
+        bSubir.textContent = 'Nivel máximo';
+        bSubir.disabled = true;
+        bSubir.title = 'Ya está en el nivel ' + R.nivelMax;
+      } else {
+        bSubir.textContent = 'Subir a nivel ' + (n + 1) + ' · ' + costo;
+        bSubir.disabled = costo > libre;
+        bSubir.title = costo > libre ? 'Te faltan ' + (costo - libre) + ' de biomasa' : 'Mejora todas las copias de este diseño';
+        if (costo > libre) notas.push('Para subir a nivel ' + (n + 1) + ' te faltan ' + (costo - libre));
+      }
+    } else {
+      mostrar('btnSubir', false);
+    }
+    var nota = $('accionNota');
+    nota.textContent = notas.join(' · ');
+    mostrar('accionNota', notas.length > 0);
+  }
+
   function textoPista() {
+    if (J.fase === 'pensando') return '';
     if (J.fase !== 'draft') return '';
     if (!J.disenos.length) return 'Todavía no tenés bestias. Armá la primera en el laboratorio.';
     if (!J.diseno) return 'Elegí una de tus bestias para desplegarla.';
@@ -228,8 +315,23 @@
     return 'Tocá una casilla de tu zona para poner ' + sd.nombre + '.';
   }
 
+  function subirNivel() {
+    var d = J.sel || J.diseno;
+    if (!d || J.fase !== 'draft') return;
+    var n = nivelDe(d), costo = BM.costoSubirNivel(d.cab, d.tor, d.pat, n);
+    if (costo === null) return;
+    var libre = biomasaLibre();
+    if (costo > libre) {
+      $('aviso').textContent = 'Te faltan ' + (costo - libre) + ' de biomasa para subir a nivel ' + (n + 1) + '.';
+      return;
+    }
+    J.niv[BM.claveDiseno(d)] = n + 1;
+    restaurarAviso();
+    actualizarLab();
+  }
+
   // ── Mis bestias ──────────────────────────────────────────────────────────
-  function claveDiseno(d) { return d.cab + '|' + d.tor + '|' + d.pat; }
+  var claveDiseno = BM.claveDiseno;
   function buscarDiseno(d) {
     var k = claveDiseno(d);
     for (var i = 0; i < J.disenos.length; i++) if (claveDiseno(J.disenos[i]) === k) return J.disenos[i];
@@ -327,7 +429,7 @@
     b.className = 'bestia';
     b.dataset.clave = claveDiseno(d);
     b.innerHTML =
-      '<span class="bestia-img"><canvas aria-hidden="true"></canvas><span class="bestia-n" hidden></span></span>' +
+      '<span class="bestia-img"><canvas aria-hidden="true"></canvas><span class="bestia-n" hidden></span><span class="pips bestia-niv" aria-hidden="true"></span></span>' +
       '<span class="bestia-txt"><span class="bestia-nombre"></span><span class="bestia-costo"></span></span>';
     b.addEventListener('click', function () { if (J.fase === 'draft') elegirDiseno(d); });
     return b;
@@ -356,19 +458,25 @@
       lista.dataset.claves = claves;
       if (enfocada) { var f = lista.querySelector('[data-clave="' + enfocada + '"]'); if (f) f.focus(); }
     }
-    var libre = biomasaLibre();
     var cartas = lista.querySelectorAll('.bestia[data-clave]');
     for (var i = 0; i < cartas.length; i++) {
       var d = J.disenos[i], c = cartas[i];
-      var s = BM.ensamblar(d.cab, d.tor, d.pat);
+      var nivel = nivelDe(d);
+      var s = BM.ensamblar(d.cab, d.tor, d.pat, nivel);
       var n = copiasDesplegadas(d);
+      var falta = faltaParaDesplegar(d);
       var elegida = !!J.diseno && claveDiseno(J.diseno) === c.dataset.clave;
       c.setAttribute('aria-pressed', elegida ? 'true' : 'false');
       c.disabled = J.fase !== 'draft';
-      c.classList.toggle('sin-biomasa', s.costo > libre);
-      c.setAttribute('aria-label', s.nombre + '. Cuesta ' + s.costo + ' de biomasa.' + (n ? ' ' + n + (n === 1 ? ' desplegada.' : ' desplegadas.') : ''));
+      c.classList.toggle('sin-biomasa', falta > 0);
+      c.setAttribute('aria-label', s.nombre + '. Nivel ' + nivel + ' de ' + R.nivelMax + '. Cuesta ' + s.costo + ' de biomasa.' +
+        (falta ? ' Te faltan ' + falta + '.' : '') + (n ? ' ' + n + (n === 1 ? ' desplegada.' : ' desplegadas.') : ''));
       c.querySelector('.bestia-nombre').textContent = s.nombre;
-      c.querySelector('.bestia-costo').innerHTML = '<b>' + s.costo + '</b> biomasa';
+      c.querySelector('.bestia-costo').innerHTML = '<b>' + s.costo + '</b> ' + (falta ? '<em>te faltan ' + falta + '</em>' : 'biomasa');
+      var pips = c.querySelector('.bestia-niv');
+      var htmlPips = pipsNivel(nivel);
+      if (pips.innerHTML !== htmlPips) pips.innerHTML = htmlPips;
+      pips.title = 'Nivel ' + nivel + ' de ' + R.nivelMax;
       var bn = c.querySelector('.bestia-n');
       bn.hidden = !n;
       bn.textContent = '×' + n;
@@ -403,8 +511,9 @@
 
   function actualizarBarra() {
     $('ronda').textContent = J.ronda;
-    var total = BM.presupuesto(J.ronda);
-    $('biomasa').innerHTML = biomasaLibre() + '<small> / ' + total + '</small>';
+    var libre = biomasaLibre(), ingreso = BM.ingresoRonda(J.ronda);
+    $('biomasa').innerHTML = libre + '<small> +' + ingreso + '<span class="solo-ancho"> esta ronda</span></small>';
+    $('biomasa').parentElement.title = 'Biomasa libre. Esta ronda sumás ' + ingreso + ' y lo que no gastes pasa a la siguiente.';
     var yo = J.vida[J.miBando], rival = J.vida[1 - J.miBando];
     $('vidaYo').style.width = (yo / R.vidaJugador * 100) + '%';
     $('vidaRival').style.width = (rival / R.vidaJugador * 100) + '%';
@@ -412,6 +521,7 @@
     $('vidaRivalNum').textContent = rival;
     $('nombreYo').textContent = J.nombres[J.miBando] || 'Vos';
     $('nombreRival').textContent = J.nombres[1 - J.miBando] || 'Rival';
+    $('nombreRival').title = $('nombreRival').textContent;
     var btn = $('btnCombatir');
     btn.textContent = J.modo === 'duelo' ? 'Enviar ejército' : 'Combatir';
     btn.disabled = J.fase !== 'draft' || J.ejercito.length === 0;
@@ -421,6 +531,7 @@
   function entrarJuego() {
     pantalla(null);
     mostrar('marcador', true); mostrar('btnCombatir', true); mostrar('mesa', true); mostrar('pestanas', true);
+    document.body.classList.add('en-partida');
     requestAnimationFrame(ajustarCampo);
   }
 
@@ -436,20 +547,21 @@
     var aviso = J.rivalVisto.length
       ? 'Ronda ' + J.ronda + '. Arriba, en tenue, está lo que ' + rivalTexto() + ' desplegó la ronda pasada. Puede sumar más.'
       : 'Ronda ' + J.ronda + '. El rival todavía no mostró su ejército. Desplegá en tu zona, abajo.';
+    if (J.alerta) aviso += ' ' + J.alerta;
     J.avisoRonda = aviso;
     $('aviso').textContent = aviso;
     irAVista(J.disenos.length ? 'campo' : 'lab');
     requestAnimationFrame(ajustarCampo);
   }
 
-  function iniciarCombate(ejA, ejB, semilla, alTerminar) {
+  function iniciarCombate(ejA, ejB, semilla, nivA, nivB, alTerminar) {
     J.fase = 'combate';
     J.sel = null; J.arrastre = null; J.efectos = []; J.fases = {};
-    J.combate = { c: BM.crearCombate(ejA, ejB, semilla), acum: 0, fin: null, alTerminar: alTerminar };
+    J.combate = { c: BM.crearCombate(ejA, ejB, semilla, nivA, nivB), acum: 0, fin: null, alTerminar: alTerminar };
     document.body.classList.add('en-combate');
     J.vista = 'campo'; $('mesa').dataset.vista = 'campo';
     $('velocidades').classList.remove('oculto');
-    $('aviso').textContent = 'Combate de la ronda ' + J.ronda + '.';
+    $('aviso').textContent = 'Combate de la ronda ' + J.ronda + '.' + (J.alerta ? ' ' + J.alerta : '');
     actualizarLab();
     requestAnimationFrame(ajustarCampo);
   }
@@ -535,39 +647,79 @@
   }
 
   // ── Modo contra la IA ────────────────────────────────────────────────────
+  function dificultadGuardada() {
+    var id = leerLocal('bm-dificultad', 'rival');
+    return listaDificultades().some(function (d) { return d.id === id; }) ? id : 'rival';
+  }
+
   function iniciarIA() {
     J.modo = 'ia'; J.miBando = 0; J.ronda = 1;
     J.vida = [R.vidaJugador, R.vidaJugador];
-    J.nombres = ['Vos', 'IA'];
-    J.ejercito = []; J.rivalVisto = [];
+    var marcada = document.querySelector('input[name="dificultad"]:checked');
+    J.dificultad = marcada ? marcada.value : dificultadGuardada();
+    J.nombres = ['Vos', 'IA · ' + nombreDificultad(J.dificultad)];
+    J.ejercito = []; J.rivalVisto = []; J.rivalNiv = {};
+    J.niv = {}; J.ejPrev = []; J.nivPrev = {}; J.libreAnt = 0; J.alerta = '';
     reiniciarDisenos();
-    J.ia = { ej: [], visto: [], semilla: (Math.random() * 1e9) >>> 0 };
+    // la IA lleva su propio libro: lo que dejó en mesa, sus niveles, su biomasa y su memoria
+    J.ia = { ej: [], niv: {}, libre: 0, memoria: null, visto: [], nivVisto: {}, semilla: (Math.random() * 1e9) >>> 0 };
     entrarJuego();
     iniciarDraft();
   }
 
+  // Pide el ejército de la IA. Usa BM.pensarIA si existe; si no (o si falla), las recetas fijas.
+  function pedirEjercitoIA(ia, alProgreso) {
+    var op = {
+      dificultad: J.dificultad, ronda: J.ronda, semilla: ia.semilla + J.ronda * 31,
+      ejPrevio: copiarEj(ia.ej), nivPrevio: copiarNiv(ia.niv), libreAnterior: ia.libre,
+      ejVisto: copiarEj(ia.visto), nivVisto: copiarNiv(ia.nivVisto), memoria: ia.memoria, alProgreso: alProgreso
+    };
+    var respaldo = function () {
+      return { ej: BM.generarEjercitoIA(op.ejPrevio, op.ejVisto, op.ronda, op.semilla), niv: copiarNiv(ia.niv), memoria: ia.memoria };
+    };
+    if (typeof BM.pensarIA !== 'function') return Promise.resolve(respaldo());
+    return Promise.resolve().then(function () { return BM.pensarIA(op); }).then(function (r) {
+      return r && r.ej ? r : respaldo();
+    }, function () { return respaldo(); });
+  }
+
   function combatirIA() {
     var ia = J.ia;
-    var nuevo = BM.generarEjercitoIA(ia.ej, ia.visto, J.ronda, ia.semilla + J.ronda * 31);
-    var mio = copiarEj(J.ejercito);
-    iniciarCombate(mio, nuevo, ia.semilla + J.ronda, function (dano, ganador) {
-      J.vida = [Math.max(0, J.vida[0] - dano[0]), Math.max(0, J.vida[1] - dano[1])];
-      actualizarBarra();
-      ia.ej = nuevo; ia.visto = mio;
-      var r = textoResultado(dano, ganador);
-      if (J.vida[0] <= 0 || J.vida[1] <= 0) {
-        var gane = J.vida[1] <= 0 && J.vida[0] > 0;
-        mostrarResultado(gane ? 'Ganaste la partida' : (J.vida[0] <= 0 && J.vida[1] <= 0 ? 'Empate final' : 'La IA ganó la partida'),
-          r.texto + ' Llegaste a la ronda ' + J.ronda + '.',
-          [{ texto: 'Jugar otra vez', fn: iniciarIA }, { texto: 'Volver al inicio', fn: volverInicio }]);
-        return;
-      }
-      mostrarResultado(r.titulo, r.texto, [{ texto: 'Desplegar ronda ' + (J.ronda + 1), fn: function () {
-        pantalla(null);
-        J.ronda++;
-        J.rivalVisto = nuevo;
-        iniciarDraft();
-      } }]);
+    if (J.fase !== 'draft' || !J.ejercito.length) return; // también frena el doble clic
+    if (biomasaLibre() < 0) return;
+    J.fase = 'pensando';
+    J.sel = null; J.arrastre = null;
+    var mio = copiarEj(J.ejercito), nivMio = copiarNiv(J.niv);
+    $('aviso').textContent = 'La IA está pensando…';
+    actualizarLab();
+    var progreso = function (f) {
+      if (J.fase === 'pensando' && J.ia === ia && f > 0 && f < 1) $('aviso').textContent = 'La IA está pensando… ' + Math.round(f * 100) + '%';
+    };
+    pedirEjercitoIA(ia, progreso).then(function (res) {
+      if (J.fase !== 'pensando' || J.ia !== ia) return; // se fue al inicio mientras pensaba
+      var nuevo = copiarEj(res.ej), nivIA = copiarNiv(res.niv);
+      var libreIA = BM.biomasaLibre(ia.libre, J.ronda, ia.ej, ia.niv, nuevo, nivIA);
+      iniciarCombate(mio, nuevo, ia.semilla + J.ronda, nivMio, nivIA, function (dano, ganador) {
+        J.vida = [Math.max(0, J.vida[0] - dano[0]), Math.max(0, J.vida[1] - dano[1])];
+        actualizarBarra();
+        ia.ej = nuevo; ia.niv = nivIA; ia.libre = libreIA; ia.memoria = res.memoria || ia.memoria;
+        ia.visto = mio; ia.nivVisto = nivMio;
+        var r = textoResultado(dano, ganador);
+        if (J.vida[0] <= 0 || J.vida[1] <= 0) {
+          var gane = J.vida[1] <= 0 && J.vida[0] > 0;
+          mostrarResultado(gane ? 'Ganaste la partida' : (J.vida[0] <= 0 && J.vida[1] <= 0 ? 'Empate final' : 'La IA ganó la partida'),
+            r.texto + ' Llegaste a la ronda ' + J.ronda + '.',
+            [{ texto: 'Jugar otra vez', fn: iniciarIA }, { texto: 'Volver al inicio', fn: volverInicio }]);
+          return;
+        }
+        mostrarResultado(r.titulo, r.texto, [{ texto: 'Desplegar ronda ' + (J.ronda + 1), fn: function () {
+          pantalla(null);
+          cerrarRonda(); // lo que quedó en mesa y la biomasa sin gastar pasan a la ronda siguiente
+          J.ronda++;
+          J.rivalVisto = nuevo; J.rivalNiv = nivIA;
+          iniciarDraft();
+        } }]);
+      });
     });
   }
 
@@ -605,6 +757,21 @@
     entrarJuego();
   }
 
+  // Avisa (sin frenar nada) si el ejército del rival no cuadra con la biomasa que le tocaba.
+  function alertaDuelo(est, otro) {
+    return est.invalido && est.invalido[otro] !== null && est.invalido[otro] !== undefined
+      ? 'Ojo: el ejército de ' + (J.nombres[otro] || 'tu rival') + ' no cuadra con la biomasa que tenía (ronda ' + est.invalido[otro] + ').'
+      : '';
+  }
+
+  // Base del libro de biomasa para la ronda `ronda`: lo que dejé al cerrar la anterior y lo que me quedó libre.
+  function basarLibro(d, yo, ronda, est) {
+    J.ejPrev = ronda > 1 ? BM.ejercitoDuelo(d, yo, ronda - 1) : [];
+    J.nivPrev = ronda > 1 ? copiarNiv(BM.nivelesDuelo(d, yo, ronda - 1)) : {};
+    var h = est.biomasa[yo];
+    J.libreAnt = ronda > 1 && h && h[ronda - 2] !== undefined ? h[ronda - 2] : 0;
+  }
+
   function draftDuelo(ronda) {
     var d = J.duelo, yo = J.miBando, otro = 1 - yo;
     var est = BM.estadoDuelo(d);
@@ -612,7 +779,11 @@
     J.vida = est.vida.slice();
     J.nombres = [d.n[0] || 'Jugador A', d.n[1] || 'Jugador B'];
     J.ejercito = ronda > 1 ? BM.ejercitoDuelo(d, yo, ronda - 1) : [];
+    J.niv = ronda > 1 ? copiarNiv(BM.nivelesDuelo(d, yo, ronda - 1)) : {};
     J.rivalVisto = ronda > 1 ? BM.ejercitoDuelo(d, otro, ronda - 1) : [];
+    J.rivalNiv = ronda > 1 ? BM.nivelesDuelo(d, otro, ronda - 1) : {};
+    basarLibro(d, yo, ronda, est);
+    J.alerta = alertaDuelo(est, otro);
     iniciarDraft();
   }
 
@@ -624,14 +795,19 @@
     J.vida = antes.slice();
     J.nombres = [d.n[0] || 'Jugador A', d.n[1] || 'Jugador B'];
     J.ejercito = BM.ejercitoDuelo(d, J.miBando, ronda);
+    J.niv = copiarNiv(BM.nivelesDuelo(d, J.miBando, ronda));
     J.rivalVisto = BM.ejercitoDuelo(d, 1 - J.miBando, ronda);
+    J.rivalNiv = BM.nivelesDuelo(d, 1 - J.miBando, ronda);
+    basarLibro(d, J.miBando, ronda, est);
+    J.alerta = alertaDuelo(est, 1 - J.miBando);
     actualizarBarra();
-    iniciarCombate(BM.ejercitoDuelo(d, 0, ronda), BM.ejercitoDuelo(d, 1, ronda), BM.semillaRonda(d.s, ronda), function (dano, ganador) {
-      var h = est.historial[ronda - 1];
-      J.vida = h.vida.slice();
-      actualizarBarra();
-      despues(textoResultado(dano, ganador), BM.estadoDuelo(d));
-    });
+    iniciarCombate(BM.ejercitoDuelo(d, 0, ronda), BM.ejercitoDuelo(d, 1, ronda), BM.semillaRonda(d.s, ronda),
+      BM.nivelesDuelo(d, 0, ronda), BM.nivelesDuelo(d, 1, ronda), function (dano, ganador) {
+        var h = est.historial[ronda - 1];
+        J.vida = h.vida.slice();
+        actualizarBarra();
+        despues(textoResultado(dano, ganador), BM.estadoDuelo(d));
+      });
   }
 
   function trasCombateDuelo(r, est) {
@@ -651,7 +827,7 @@
 
   function enviarEjercitoDuelo() {
     var d = J.duelo, yo = J.miBando, otro = 1 - yo;
-    d.e[yo][J.ronda - 1] = BM.codificarEjercito(J.ejercito);
+    d.e[yo][J.ronda - 1] = BM.codificarRonda(J.ejercito, J.niv);
     d.e[yo].length = J.ronda;
     if (d.e[otro].length >= J.ronda) {
       verCombateDuelo(J.ronda, trasCombateDuelo);
@@ -685,7 +861,9 @@
       J.ronda = d.e[mio].length;
       entrarJuego();
       J.ejercito = BM.ejercitoDuelo(d, mio, J.ronda);
-      J.rivalVisto = [];
+      J.niv = copiarNiv(BM.nivelesDuelo(d, mio, J.ronda));
+      J.rivalVisto = []; J.rivalNiv = {};
+      basarLibro(d, mio, J.ronda, est);
       J.fase = 'esperando';
       $('aviso').textContent = 'Le toca a ' + (J.nombres[1 - mio] || 'tu rival') + '.';
       sembrarDisenos(J.ejercito);
@@ -732,7 +910,7 @@
     J.fase = 'inicio'; J.combate = null;
     try { history.replaceState(null, '', location.href.split('#')[0]); } catch (e) { /* iframe */ }
     mostrar('marcador', false); mostrar('btnCombatir', false); mostrar('mesa', false); mostrar('pestanas', false);
-    document.body.classList.remove('en-combate');
+    document.body.classList.remove('en-combate', 'en-partida');
     pantalla('pInicio');
   }
 
@@ -749,12 +927,13 @@
       return;
     }
     var s = BM.ensamblar(J.diseno.cab, J.diseno.tor, J.diseno.pat);
-    var libre = biomasaLibre();
-    if (s.costo > libre) {
-      $('aviso').textContent = 'Te falta biomasa: ' + s.nombre + ' cuesta ' + s.costo + ' y te quedan ' + libre + '. Reciclá algo o elegí otra bestia.';
+    var falta = faltaParaDesplegar(J.diseno);
+    if (falta > 0) {
+      $('aviso').textContent = 'Te faltan ' + falta + ' de biomasa: ' + s.nombre + ' cuesta ' + s.costo + ' y te quedan ' + biomasaLibre() + '. Reciclá algo o elegí otra bestia.';
       return;
     }
     J.ejercito.push({ cab: J.diseno.cab, tor: J.diseno.tor, pat: J.diseno.pat, col: col, prof: prof });
+    J.destello = { col: col, prof: prof, t0: performance.now() / 1000 };
     restaurarAviso();
     actualizarLab();
   }
@@ -808,15 +987,23 @@
     var unidades = [];
     J.rivalVisto.forEach(function (u) {
       var p = BM.posicionCelda(otro, u.col, u.prof);
-      unidades.push({ x: p.x, y: p.y, b: BM.ensamblar(u.cab, u.tor, u.pat), o: { equipo: BM.COLOR.rival, alfa: 0.5, ang: otro === 0 ? 0 : Math.PI } });
+      unidades.push({ x: p.x, y: p.y, b: BM.ensamblar(u.cab, u.tor, u.pat), nivel: BM.nivelDiseno(J.rivalNiv, u), o: { equipo: BM.COLOR.rival, alfa: 0.5, ang: otro === 0 ? 0 : Math.PI } });
     });
     J.ejercito.forEach(function (u, i) {
       var p = BM.posicionCelda(yo, u.col, u.prof);
       if (J.arrastre && J.arrastre.u === u && J.arrastre.movido) p = J.arrastre.w;
-      unidades.push({ x: p.x, y: p.y, b: BM.ensamblar(u.cab, u.tor, u.pat),
+      unidades.push({ x: p.x, y: p.y, b: BM.ensamblar(u.cab, u.tor, u.pat), nivel: nivelDe(u),
         o: { equipo: BM.COLOR.yo, ang: yo === 0 ? 0 : Math.PI, fase: Math.sin(t * 1.5 + i) * 0.4 } });
     });
-    var esc = { girar: yo === 1, unidades: unidades, grilla: J.fase === 'draft' };
+    var enDraft = J.fase === 'draft' || J.fase === 'pensando';
+    var esc = { girar: yo === 1, unidades: unidades, grilla: enDraft };
+    // mientras hay un diseño elegido para desplegar, la zona propia se tiñe apenas
+    if (J.fase === 'draft' && J.diseno && !J.sel && faltaParaDesplegar(J.diseno) === 0) esc.colocar = yo;
+    if (J.destello) {
+      var a = 1 - (t - J.destello.t0) / 0.5;
+      if (a > 0) { var pd = BM.posicionCelda(yo, J.destello.col, J.destello.prof); esc.destello = { x: pd.x, y: pd.y, a: a }; }
+      else J.destello = null;
+    }
     if (J.sel) {
       var ps = J.arrastre && J.arrastre.movido ? J.arrastre.w : BM.posicionCelda(yo, J.sel.col, J.sel.prof);
       esc.seleccion = { x: ps.x, y: ps.y, r: BM.ensamblar(J.sel.cab, J.sel.tor, J.sel.pat).radio };
@@ -829,7 +1016,7 @@
         esc.celda = { x: pc.x, y: pc.y, valida: true };
       } else if (!ocupada && !J.sel && J.diseno) {
         var s = BM.ensamblar(J.diseno.cab, J.diseno.tor, J.diseno.pat);
-        esc.fantasma = { x: pc.x, y: pc.y, b: s, valido: s.costo <= biomasaLibre() };
+        esc.fantasma = { x: pc.x, y: pc.y, b: s, valido: faltaParaDesplegar(J.diseno) === 0 };
       }
     }
     return esc;
@@ -843,7 +1030,7 @@
       var y = u.py === undefined ? u.y : u.py + (u.y - u.py) * alfa;
       if (u.moviendo) J.fases[u.id] = (J.fases[u.id] || 0) + dt * J.vel * (4 + u.s.velocidad / 25);
       return {
-        x: x, y: y, b: u.s, vida: u.vida, veneno: u.veneno.length,
+        x: x, y: y, b: u.s, nivel: u.s.nivel, vida: u.vida, veneno: u.veneno.length,
         o: { equipo: u.bando === J.miBando ? BM.COLOR.yo : BM.COLOR.rival, ang: Math.atan2(u.dirX, -u.dirY),
           fase: J.fases[u.id] || 0, golpeado: u.golpeado > 0, atacando: u.atacando > 0, muerta: !u.viva }
       };
@@ -898,10 +1085,36 @@
     });
   }
 
+  // ── Dificultad de la IA (pantalla de inicio) ─────────────────────────────
+  function construirDificultad() {
+    var cont = $('difOpciones');
+    var actual = dificultadGuardada();
+    cont.innerHTML = '';
+    listaDificultades().forEach(function (d) {
+      var l = document.createElement('label');
+      l.className = 'seg';
+      var i = document.createElement('input');
+      i.type = 'radio'; i.name = 'dificultad'; i.value = d.id; i.checked = d.id === actual;
+      i.addEventListener('change', function () { guardarLocal('bm-dificultad', d.id); textoDificultad(); });
+      var t = document.createElement('span');
+      t.textContent = d.nombre;
+      l.appendChild(i); l.appendChild(t);
+      cont.appendChild(l);
+    });
+    textoDificultad();
+  }
+  function textoDificultad() {
+    var id = dificultadGuardada(), l = listaDificultades();
+    var sel = document.querySelector('input[name="dificultad"]:checked');
+    if (sel) id = sel.value;
+    for (var i = 0; i < l.length; i++) if (l[i].id === id) $('difTexto').textContent = l[i].texto;
+  }
+
   // ── Arranque ─────────────────────────────────────────────────────────────
   function iniciar() {
     render = BM.crearRenderCampo($('campo'));
     construirPartes();
+    construirDificultad();
     actualizarLab();
     dibujarPortada();
     BM.cargarSprites(function () { repintarIconos(); dibujarPortada(); actualizarLab(); });
@@ -926,10 +1139,11 @@
       if (fn) fn(n);
     });
     $('btnCombatir').addEventListener('click', function () {
-      if (J.fase !== 'draft' || !J.ejercito.length) return;
+      if (J.fase !== 'draft' || !J.ejercito.length || biomasaLibre() < 0) return;
       if (J.modo === 'ia') combatirIA(); else enviarEjercitoDuelo();
     });
     $('btnReciclar').addEventListener('click', reciclar);
+    $('btnSubir').addEventListener('click', subirNivel);
     $('btnCopiar').addEventListener('click', function () {
       if (!J.sel) return;
       elegirDiseno(J.sel);

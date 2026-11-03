@@ -15,7 +15,7 @@
     <h1 class="marca">BeastMixer</h1>
     <div class="marcador" id="marcador" hidden>
       <div class="dato"><span class="dato-etq">Ronda</span><span class="dato-val" id="ronda">1</span></div>
-      <div class="dato"><span class="dato-etq">Biomasa</span><span class="dato-val" id="biomasa">60</span></div>
+      <div class="dato dato-biomasa"><span class="dato-etq">Biomasa</span><span class="dato-val" id="biomasa">60</span></div>
       <div class="vidas">
         <div class="vida vida-yo"><span class="vida-nombre" id="nombreYo">Vos</span><span class="vida-barra"><i id="vidaYo"></i></span><span class="vida-num" id="vidaYoNum">100</span></div>
         <div class="vida vida-rival"><span class="vida-nombre" id="nombreRival">Rival</span><span class="vida-barra"><i id="vidaRival"></i></span><span class="vida-num" id="vidaRivalNum">100</span></div>
@@ -41,13 +41,15 @@
       </div>
 
       <div class="accion" id="accion">
-        <p class="pista" id="pista"></p>
-        <div class="seleccion" id="seleccion" hidden>
-          <p id="seleccionTexto"></p>
-          <div class="seleccion-acciones">
-            <button class="btn btn-chico" id="btnCopiar">Usar este diseño</button>
-            <button class="btn btn-chico btn-peligro" id="btnReciclar">Reciclar</button>
-          </div>
+        <div class="accion-txt">
+          <p class="pista" id="pista"></p>
+          <p class="accion-sel" id="seleccionTexto" hidden></p>
+          <p class="accion-nota" id="accionNota" hidden></p>
+        </div>
+        <div class="accion-botones">
+          <button class="btn btn-chico btn-subir" id="btnSubir" hidden>Subir de nivel</button>
+          <button class="btn btn-chico" id="btnCopiar" hidden>Usar este diseño</button>
+          <button class="btn btn-chico btn-peligro" id="btnReciclar" hidden>Reciclar</button>
         </div>
       </div>
 
@@ -61,10 +63,15 @@
       <div class="lamina">
         <canvas id="lamina" width="320" height="230" aria-hidden="true"></canvas>
         <div class="lamina-pie">
-          <h2 class="especie" id="especie">Lobo</h2>
+          <div class="especie-bloque">
+            <h2 class="especie" id="especie">Lobo</h2>
+            <p class="nivel-lab" id="nivelLab">Nivel 1 de 3</p>
+          </div>
           <span class="costo" id="costo"><b>11</b> de biomasa</span>
         </div>
       </div>
+
+      <ul class="resumen" id="resumen" aria-label="Resumen de estadísticas"></ul>
 
       <div class="partes" id="partes"></div>
 
@@ -83,6 +90,11 @@
       <canvas id="portada" width="560" height="220" aria-hidden="true"></canvas>
       <h2 class="titular">Mezclá bestias.<br>Desplegalas.<br>Mirá quién queda en pie.</h2>
       <p>Cada bestia es cabeza, torso y patas de animales distintos. Vos armás y ubicás; el combate se juega solo. Gana el último con vida.</p>
+      <fieldset class="dificultad" id="dificultad">
+        <legend>Dificultad de la IA</legend>
+        <div class="segmentos" id="difOpciones"></div>
+        <p class="dificultad-texto" id="difTexto" aria-live="polite"></p>
+      </fieldset>
       <div class="acciones">
         <button class="btn btn-principal" id="btnIA">Jugar contra la IA</button>
         <button class="btn" id="btnDuelo">Retar a un amigo por link</button>
@@ -130,9 +142,9 @@
       <h2>Cómo se juega</h2>
       <ol>
         <li><b>Diseñá.</b> En el laboratorio elegí la cabeza (cómo ataca), el torso (cuánto aguanta) y las patas (qué tan rápido va) de tres animales.</li>
-        <li><b>Desplegá.</b> Guardá la bestia en «Mis bestias», elegila y tocá una casilla de tu zona para ponerla. Arrastrala para moverla. Reciclar devuelve toda la biomasa.</li>
+        <li><b>Desplegá.</b> Guardá la bestia en «Mis bestias», elegila y tocá una casilla de tu zona para ponerla. Arrastrala para moverla. Reciclar devuelve toda la biomasa de lo que compraste esta ronda, y la mitad si la bestia ya venía de antes.</li>
         <li><b>Mirá el combate.</b> Cada bestia ataca sola al enemigo más cercano.</li>
-        <li><b>Contrarrestá.</b> Tu ejército se queda entre rondas y cada ronda recibís más biomasa. Mientras desplegás ves lo que el rival puso la ronda pasada.</li>
+        <li><b>Contrarrestá.</b> Tu ejército se queda entre rondas y cada ronda recibís más biomasa y lo que no gastás se acumula. Podés subir de nivel un diseño (hasta el 3): todas sus copias ganan vida y daño. Mientras desplegás ves lo que el rival puso la ronda pasada.</li>
         <li><b>Ganá.</b> El que pierde la ronda pierde vida según cuántas bestias rivales sobrevivieron. Gana quien deja al otro en cero.</li>
       </ol>
       <p class="pista">Pistas: el caparazón de tortuga frena a los mordiscos rápidos; el veneno ignora la armadura; los lobos alcanzan a los que atacan de lejos.</p>
