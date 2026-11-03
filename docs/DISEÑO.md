@@ -14,7 +14,7 @@ Separado por escalones, porque cada uno es un salto distinto:
 
 1. **Arte combinatorio.** La magia de *Impossible Creatures* era que cualquier mezcla se veía bien (modelos 3D con partes intercambiables). Con 8 animales y 3 partes ya hay 512 bestias; con 20 animales son 8.000. El prototipo lo resuelve dibujando cada parte por código con la paleta de su animal. Para un juego final hay que diseñar **un sistema de partes con puntos de anclaje comunes** (cuello, cadera, hombros), ya sea en 2D vectorial, sprites por parte o 3D low-poly. Es un problema de diseño gráfico antes que de programación.
 2. **Balance combinatorio.** Con miles de combinaciones aparecen bestias rotas. Herramienta clave: simular miles de combates automáticamente (ya está la base en `tests/sim.test.mjs`) y buscar combinaciones dominantes.
-3. **PvP sin trampa.** Hoy el link contiene el ejército del rival: alguien curioso podría decodificarlo antes de desplegar. Entre amigos alcanza. La solución es un servidor chico que guarde los ejércitos y sólo revele el del rival cuando los dos enviaron (como el Worker de Cloudflare que ya usás para Shakedown). Como el combate es determinista, el servidor sólo guarda ejércitos y verifica resultados; no necesita correr el juego en tiempo real.
+3. **PvP sin trampa.** Hoy el link contiene el ejército del rival: alguien curioso podría decodificarlo antes de desplegar. Entre amigos alcanza. La solución es un servidor chico que guarde los ejércitos y sólo revele el del rival cuando los dos enviaron (por ejemplo, un Cloudflare Worker con almacenamiento KV). Como el combate es determinista, el servidor sólo guarda ejércitos y verifica resultados; no necesita correr el juego en tiempo real.
 
 ## Sobre la propiedad intelectual
 
@@ -56,6 +56,22 @@ Reglas de daño: cada golpe resta la armadura del objetivo (mínimo 1). El venen
 - **Simulación determinista**: paso fijo de 1/30 s, sólo operaciones con resultado idéntico en todos los navegadores, RNG con semilla, orden fijo. Mismo par de ejércitos + misma semilla = mismo combate en cualquier lado. La vida de cada jugador no se guarda: se recalcula re-simulando todas las rondas, así no se puede editar a mano.
 - **Duelo por link**: el estado completo va en `#d=...` (menos de 100 caracteres en la ronda 1; crece unos 7 por bestia y por ronda). Cada navegador recuerda qué lado jugó en cada duelo, para avisar si abrís tu propio link.
 - **El render no toca la simulación**: lee posiciones y eventos e interpola entre pasos.
+
+## Relación con la arquitectura en Godot
+
+El prototipo parte de un reporte de arquitectura para un MVP de auto-battler en Godot 4 exportado a la web. Las ideas se tradujeron así:
+
+| Godot | BeastMixer |
+|---|---|
+| `CriaturaData` / `MutacionData` (Resources) | `animales.js` + `ensamblar()`: tres partes en vez de base + mutación |
+| `duplicate(true)` para no mutar plantillas | `ensamblar()` es una función pura; el catálogo nunca se modifica |
+| `SignalBus.gd` (Autoload) | `BM.bus` en `base.js` |
+| `GestorEconomia.gd` | `presupuesto()` y `costoEjercito()` en `partida.js` |
+| `GameManager.gd` (DRAFT / COMBATE) | `juego.js` (fases draft → combate → resultado) |
+| `CriaturaFSM.gd` + `distance_squared_to` | `simulacion.js`: buscar → mover → atacar → muerto |
+| `calcular_anclaje_grilla()` | `celdaDesdeMundo()` / `posicionCelda()` |
+
+La diferencia principal: en vez de `CharacterBody2D` + `move_and_slide()`, el combate es una simulación determinista propia, que es lo que habilita el PvP asíncrono.
 
 ## Próximos pasos sugeridos
 
