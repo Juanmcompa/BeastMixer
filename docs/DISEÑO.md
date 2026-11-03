@@ -12,7 +12,7 @@ Separado por escalones, porque cada uno es un salto distinto:
 
 ### Los tres problemas difíciles de verdad
 
-1. **Arte combinatorio.** La magia de *Impossible Creatures* era que cualquier mezcla se veía bien (modelos 3D con partes intercambiables). Con 8 animales y 3 partes ya hay 512 bestias; con 20 animales son 8.000. El prototipo lo resuelve dibujando cada parte por código con la paleta de su animal. Para un juego final hay que diseñar **un sistema de partes con puntos de anclaje comunes** (cuello, cadera, hombros), ya sea en 2D vectorial, sprites por parte o 3D low-poly. Es un problema de diseño gráfico antes que de programación.
+1. **Arte combinatorio.** La magia de *Impossible Creatures* era que cualquier mezcla se veía bien (modelos 3D con partes intercambiables). Con 8 animales y 3 partes ya hay 512 bestias; con 20 animales son 8.000. El prototipo lo resuelve con **sprites por pieza vistos desde arriba** (cabeza, torso, pata delantera y trasera) que se encastran en puntos de anclaje comunes: cuello, hombros y caderas. Cada pieza se escala según el torso que la recibe. Ver [ARTE.md](ARTE.md). El siguiente salto es animar ataques y muertes, y probar vistas en 3/4 para dar más volumen.
 2. **Balance combinatorio.** Con miles de combinaciones aparecen bestias rotas. Herramienta clave: simular miles de combates automáticamente (ya está la base en `tests/sim.test.mjs`) y buscar combinaciones dominantes.
 3. **PvP sin trampa.** Hoy el link contiene el ejército del rival: alguien curioso podría decodificarlo antes de desplegar. Entre amigos alcanza. La solución es un servidor chico que guarde los ejércitos y sólo revele el del rival cuando los dos enviaron (por ejemplo, un Cloudflare Worker con almacenamiento KV). Como el combate es determinista, el servidor sólo guarda ejércitos y verifica resultados; no necesita correr el juego en tiempo real.
 
@@ -55,6 +55,7 @@ Reglas de daño: cada golpe resta la armadura del objetivo (mínimo 1). El venen
 - **HTML/JS sin dependencias**, scripts clásicos (no módulos) para que funcione con doble clic.
 - **Simulación determinista**: paso fijo de 1/30 s, sólo operaciones con resultado idéntico en todos los navegadores, RNG con semilla, orden fijo. Mismo par de ejércitos + misma semilla = mismo combate en cualquier lado. La vida de cada jugador no se guarda: se recalcula re-simulando todas las rondas, así no se puede editar a mano.
 - **Duelo por link**: el estado completo va en `#d=...` (menos de 100 caracteres en la ronda 1; crece unos 7 por bestia y por ronda). Cada navegador recuerda qué lado jugó en cada duelo, para avisar si abrís tu propio link.
+- **Arte por piezas**: cuatro sprites por animal con anclajes calculados automáticamente (`tools/procesar_arte.py`). Si una imagen no carga, el juego vuelve al dibujo por código.
 - **El render no toca la simulación**: lee posiciones y eventos e interpola entre pasos.
 
 ## Relación con la arquitectura en Godot
@@ -77,7 +78,7 @@ La diferencia principal: en vez de `CharacterBody2D` + `move_and_slide()`, el co
 
 1. Jugar varias partidas con amigos y anotar qué combinaciones dominan.
 2. Ampliar a 12 animales con un rol claro cada uno (volador, excavador, a distancia de área, sanador).
-3. Diseñar el sistema de arte por partes con anclajes comunes.
+3. Animaciones de ataque y muerte por pieza; más mapas con las variantes de ARTE.md.
 4. Servidor mínimo para el duelo (Cloudflare Worker + KV): ocultar el ejército rival y guardar historial.
 5. Mejoras de unidades entre rondas (a la Mechabellum) para que conservar el ejército tenga peso.
 6. Si se decide pasar a Godot: portar `src/core` tal cual (es lógica pura) a GDScript y mantener la simulación determinista en vez de la física de `CharacterBody2D`.

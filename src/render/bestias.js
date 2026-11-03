@@ -302,6 +302,130 @@
     return -(off[tor] || 0.95) * r;
   }
 
+  // ── SPRITES (arte de assets/bestias, ver tools/procesar_arte.py) ──────────
+  var IMG = {};          // 'lobo-cabeza' → Image
+  var listos = false;
+  var alListo = [];
+
+  function cargarSprites(cb) {
+    if (cb) alListo.push(cb);
+    var S = BM.SPRITES;
+    if (!S || typeof Image === 'undefined') return;
+    var pendientes = 0, fallo = false;
+    Object.keys(S.animales).forEach(function (a) {
+      ['cabeza', 'torso', 'pataDel', 'pataTras'].forEach(function (p) {
+        pendientes++;
+        var im = new Image();
+        im.onload = function () { if (--pendientes === 0 && !fallo) terminar(); };
+        im.onerror = function () { fallo = true; }; // si falla una, seguimos con el dibujo por código
+        im.src = S.animales[a][p].src;
+        IMG[a + '-' + p] = im;
+      });
+    });
+    function terminar() {
+      listos = true;
+      alListo.forEach(function (f) { f(); });
+      alListo = [];
+    }
+  }
+
+  function hayArte(b) {
+    var A = BM.SPRITES && BM.SPRITES.animales;
+    return listos && A && A[b.cab] && A[b.tor] && A[b.pat];
+  }
+
+  var PATA_ESCALA = 0.5;   // las patas vistas desde arriba quedan más cortas
+  var CABEZA_MAX = 1.3;     // la cabeza no puede ser más ancha que 1.3 × el torso
+
+  // Ángulos de las patas del lado izquierdo (radianes; 180° = hacia adelante).
+  var PATAS_POR_ANIMAL = {
+    arana: [[2.8, 0, 'pataDel'], [2.25, 0.33, 'pataDel'], [1.25, 0.66, 'pataTras'], [0.6, 1, 'pataTras']],
+    escorpion: [[2.4, 0, 'pataDel'], [1.6, 0.5, 'pataTras'], [0.8, 1, 'pataTras']]
+  };
+  var PATAS_NORMAL = [[2.55, 0, 'pataDel'], [0.6, 1, 'pataTras']];
+
+  // Escala y posiciones de una bestia armada con sprites, en unidades de r.
+  function geometria(b) {
+    var A = BM.SPRITES.animales;
+    var T = A[b.tor].torso, C = A[b.cab], P = A[b.pat];
+    var r = b.radio;
+    var cu = T.cuerpo;
+    var kT = (1.75 * r) / cu.ancho;
+    var cy = (cu.arriba + cu.abajo) / 2;
+    var anchoT = cu.ancho * kT;
+    var kH = kT * cu.ancho / C.torso.cuerpo.ancho;
+    if (C.cabeza.w * kH > anchoT * CABEZA_MAX) kH = anchoT * CABEZA_MAX / C.cabeza.w;
+    var kL = kT * cu.ancho / P.torso.cuerpo.ancho * PATA_ESCALA;
+    var cuello = { x: (cu.cuello.x - cu.cx) * kT, y: (cu.cuello.y - cy) * kT };
+    return { T: T, C: C, P: P, kT: kT, kH: kH, kL: kL, cx: cu.cx, cy: cy, cuello: cuello,
+      hombro: { x: cu.hombro.dx * kT, y: (cu.hombro.y - cy) * kT },
+      cadera: { x: cu.cadera.dx * kT, y: (cu.cadera.y - cy) * kT } };
+  }
+
+  function pieza(ctx, im, ax, ay, k) {
+    ctx.drawImage(im, -ax * k, -ay * k, im.width * k, im.height * k);
+  }
+
+  function dibujarConArte(ctx, b, o) {
+    var g = geometria(b);
+    var fase = o.fase || 0;
+    var lista = PATAS_POR_ANIMAL[b.pat] || PATAS_NORMAL;
+    // patas (debajo de todo), lado izquierdo y espejadas a la derecha
+    for (var lado = -1; lado <= 1; lado += 2) {
+      for (var i = 0; i < lista.length; i++) {
+        var L = lista[i];
+        var info = g.P[L[2]];
+        var t = L[1];
+        var px = -(g.hombro.x + (g.cadera.x - g.hombro.x) * t);
+        var py = g.hombro.y + (g.cadera.y - g.hombro.y) * t;
+        var paso = Math.sin(fase + (i % 2 ? Math.PI : 0) + (lado > 0 ? Math.PI : 0)) * 0.32;
+        ctx.save();
+        ctx.scale(lado < 0 ? 1 : -1, 1);
+        ctx.translate(px, py);
+        ctx.rotate(L[0] + paso);
+        pieza(ctx, IMG[b.pat + '-' + L[2]], info.ancla.x, info.ancla.y, g.kL);
+        ctx.restore();
+      }
+    }
+    // cabeza (el cuello queda tapado por el torso)
+    ctx.save();
+    var adelante = o.atacando ? b.radio * 0.3 : 0;
+    ctx.translate(g.cuello.x, g.cuello.y + g.C.cabeza.h * g.kH * 0.16 - adelante);
+    pieza(ctx, IMG[b.cab + '-cabeza'], g.C.cabeza.ancla.x, g.C.cabeza.ancla.y, g.kH);
+    ctx.restore();
+    // torso
+    pieza(ctx, IMG[b.tor + '-torso'], g.cx, g.cy, g.kT);
+  }
+
+  // Puntos de cada parte (para las cotas de la lámina), relativos al centro.
+  function puntosBestia(b) {
+    var r = b.radio;
+    if (!hayArte(b)) {
+      var h = r * 0.78 * (b.tamCabeza || 1);
+      return { cabeza: { x: 0, y: anclajeCabeza(b.tor, r) - h * 0.35 }, torso: { x: r * 0.5, y: 0 }, patas: { x: -r * 0.75, y: r * 0.55 } };
+    }
+    var g = geometria(b);
+    var altoCab = g.C.cabeza.h * g.kH;
+    return {
+      cabeza: { x: 0, y: g.cuello.y - altoCab * 0.55 },
+      torso: { x: g.hombro.x * 0.4, y: 0 },
+      patas: { x: -g.cadera.x - g.P.pataTras.h * g.kL * 0.3, y: g.cadera.y + g.P.pataTras.h * g.kL * 0.2 }
+    };
+  }
+
+  // Caja aproximada que ocupa la bestia dibujada (para encuadrarla en láminas).
+  function cajaBestia(b) {
+    var r = b.radio;
+    if (!hayArte(b)) return { x0: -r * 1.6, x1: r * 1.6, y0: -r * 2.4, y1: r * 1.8 };
+    var g = geometria(b);
+    var altoCab = g.C.cabeza.h * g.kH;
+    var arriba = g.cuello.y + altoCab * 0.16 - altoCab;
+    var abajo = (g.T.h - g.cy) * g.kT;
+    var largoPata = Math.max(g.P.pataDel.h, g.P.pataTras.h) * g.kL;
+    var ancho = Math.max(g.T.w * g.kT / 2, g.C.cabeza.w * g.kH / 2, Math.max(g.hombro.x, g.cadera.x) + largoPata * 0.95);
+    return { x0: -ancho, x1: ancho, y0: Math.min(arriba, g.hombro.y - largoPata * 0.6), y1: Math.max(abajo, g.cadera.y + largoPata * 0.85) };
+  }
+
   /*
    * Dibuja una bestia completa.
    * b: { cab, tor, pat, radio, tamCabeza }  (sirve el resultado de BM.ensamblar)
@@ -316,7 +440,7 @@
     if (o.muerta) ctx.globalAlpha *= 0.32;
 
     if (!o.sinSombra) {
-      elipse(ctx, 0, r * 0.25, r * 1.25, r * 1.1); ctx.fillStyle = 'rgba(5,15,35,0.35)'; ctx.fill();
+      elipse(ctx, 0, r * 0.25, r * 1.25, r * 1.1); ctx.fillStyle = 'rgba(10,20,10,0.28)'; ctx.fill();
     }
     if (o.equipo) {
       ctx.lineWidth = 2;
@@ -326,13 +450,16 @@
 
     ctx.rotate(o.ang || 0);
     var fase = o.fase || 0;
-    dibujarPatas(ctx, b.pat, r, fase);
-    dibujarTorso(ctx, b.tor, r);
-    ctx.save();
-    ctx.translate(0, anclajeCabeza(b.tor, r) - h * 0.35 - (o.atacando ? r * 0.25 : 0));
-    dibujarCabeza(ctx, b.cab, h, fase);
-    ctx.restore();
-
+    if (hayArte(b)) {
+      dibujarConArte(ctx, b, o);
+    } else {
+      dibujarPatas(ctx, b.pat, r, fase);
+      dibujarTorso(ctx, b.tor, r);
+      ctx.save();
+      ctx.translate(0, anclajeCabeza(b.tor, r) - h * 0.35 - (o.atacando ? r * 0.25 : 0));
+      dibujarCabeza(ctx, b.cab, h, fase);
+      ctx.restore();
+    }
     ctx.restore();
 
     if (o.golpeado && !o.muerta) {
@@ -345,22 +472,36 @@
 
   // Ícono de UNA parte (para los selectores del laboratorio).
   function dibujarParte(ctx, parte, id, tam) {
+    var A = listos && BM.SPRITES && BM.SPRITES.animales[id];
+    if (A) {
+      var margen = tam * 0.08, caja = tam - margen * 2;
+      if (parte === 'patas') {
+        var d = A.pataDel, t = A.pataTras;
+        var k = Math.min(caja / Math.max(d.h, t.h), (caja * 0.9) / (d.w + t.w));
+        var x0 = (tam - (d.w + t.w) * k * 1.1) / 2;
+        ctx.drawImage(IMG[id + '-pataDel'], x0, (tam - d.h * k) / 2, d.w * k, d.h * k);
+        ctx.drawImage(IMG[id + '-pataTras'], x0 + d.w * k * 1.1, (tam - t.h * k) / 2, t.w * k, t.h * k);
+      } else {
+        var info = A[parte], im = IMG[id + '-' + parte];
+        var esc = Math.min(caja / info.w, caja / info.h);
+        ctx.drawImage(im, (tam - info.w * esc) / 2, (tam - info.h * esc) / 2, info.w * esc, info.h * esc);
+      }
+      return;
+    }
     var r = tam * 0.34;
     ctx.save();
     ctx.translate(tam / 2, tam / 2);
     if (parte === 'cabeza') {
-      var a = BM.animalPorId(id);
       var normal = { lobo: 0.4, tortuga: 0.44, arana: 0.46, rino: 0.32, escorpion: 0.33, puercoespin: 0.42, elefante: 0.3, rana: 0.5 };
-      var h = tam * (normal[id] || 0.4);
-      ctx.translate(0, h * 0.3);
-      dibujarCabeza(ctx, id, h, 0.6);
+      var hh = tam * (normal[id] || 0.4);
+      ctx.translate(0, hh * 0.3);
+      dibujarCabeza(ctx, id, hh, 0.6);
     } else if (parte === 'torso') {
       var ajuste = { lobo: 0.72, escorpion: 0.68, puercoespin: 0.78, arana: 0.85, elefante: 0.9 };
       ctx.scale(ajuste[id] || 0.95, ajuste[id] || 0.95);
       ctx.translate(0, id === 'lobo' || id === 'escorpion' ? -r * 0.4 : -r * 0.05);
       dibujarTorso(ctx, id, r);
     } else {
-      // patas sobre una silueta neutra
       dibujarPatas(ctx, id, r, 0.6);
       elipse(ctx, 0, 0, 0.72 * r, 0.95 * r);
       ctx.fillStyle = 'rgba(216,230,242,0.18)'; ctx.fill();
@@ -372,4 +513,8 @@
   BM.dibujarBestia = dibujarBestia;
   BM.dibujarParte = dibujarParte;
   BM.anclajeCabeza = anclajeCabeza;
+  BM.cargarSprites = cargarSprites;
+  BM.puntosBestia = puntosBestia;
+  BM.cajaBestia = cajaBestia;
+  BM.spritesListos = function () { return listos; };
 })(typeof window !== 'undefined' ? (window.BM = window.BM || {}) : (globalThis.BM = globalThis.BM || {}));

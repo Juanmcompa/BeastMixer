@@ -130,7 +130,7 @@ h1, h2 { font-family: var(--display); margin: 0; font-weight: 800; letter-spacin
   border: 1.5px solid transparent; background: rgba(220, 232, 243, .05); color: var(--papel);
   font: 600 11.5px/1.1 var(--texto);
 }
-.opcion img { width: 44px; height: 44px; }
+.opcion img, .opcion canvas { width: 44px; height: 44px; }
 .opcion:hover { background: rgba(220, 232, 243, .12); }
 .opcion[aria-pressed="true"] { border-color: var(--ambar); background: rgba(244, 178, 62, .14); }
 .opcion:disabled { cursor: default; opacity: .5; }
@@ -207,7 +207,7 @@ h1, h2 { font-family: var(--display); margin: 0; font-weight: 800; letter-spacin
   .parte-opciones { grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 3px; }
   .opcion { padding: 3px 0 4px; font-size: 9.5px; }
   .opcion span { overflow: hidden; text-overflow: ellipsis; max-width: 100%; white-space: nowrap; }
-  .opcion img { width: 36px; height: 36px; }
+  .opcion img, .opcion canvas { width: 36px; height: 36px; }
   .ficha div { grid-template-columns: 112px 1fr; }
 }
 

@@ -57,18 +57,23 @@
   }
 
   // ── Laboratorio ──────────────────────────────────────────────────────────
-  var iconos = {};
+  // Íconos de partes: canvas (no imágenes) para que funcione también abriendo el archivo local.
   function icono(parte, id) {
-    var k = parte + id;
-    if (!iconos[k]) {
-      var cv = document.createElement('canvas');
-      cv.width = cv.height = 96;
-      var cx = cv.getContext('2d');
-      cx.scale(2, 2);
-      BM.dibujarParte(cx, parte, id, 48);
-      iconos[k] = cv.toDataURL();
-    }
-    return iconos[k];
+    var cv = document.createElement('canvas');
+    cv.width = cv.height = 96;
+    cv.className = 'icono';
+    cv.dataset.parte = parte; cv.dataset.animal = id;
+    pintarIcono(cv);
+    return cv;
+  }
+  function pintarIcono(cv) {
+    var cx = cv.getContext('2d');
+    cx.setTransform(2, 0, 0, 2, 0, 0);
+    cx.clearRect(0, 0, 48, 48);
+    BM.dibujarParte(cx, cv.dataset.parte, cv.dataset.animal, 48);
+  }
+  function repintarIconos() {
+    Array.prototype.forEach.call(document.querySelectorAll('canvas.icono'), pintarIcono);
   }
 
   function construirPartes() {
@@ -89,7 +94,10 @@
         b.dataset.parte = p.clave;
         b.dataset.animal = a.id;
         b.title = p.titulo + ' de ' + a.nombre;
-        b.innerHTML = '<img alt="" src="' + icono(p.id, a.id) + '"><span>' + a.nombre + '</span>';
+        b.appendChild(icono(p.id, a.id));
+        var nom = document.createElement('span');
+        nom.textContent = a.nombre;
+        b.appendChild(nom);
         b.addEventListener('click', function () {
           J.diseno[p.clave] = a.id;
           J.sel = null;
@@ -117,8 +125,10 @@
     ctx.stroke();
 
     var s = BM.ensamblar(d.cab, d.tor, d.pat);
-    var esc = Math.min(2.6, 92 / (s.radio * 2.5));
-    var cx = W / 2, cy = H / 2 + 12;
+    var caja = BM.cajaBestia(s);
+    var anchoCaja = opciones && opciones.sinCotas ? W - 30 : W - 150;
+    var esc = Math.min(4, anchoCaja / (caja.x1 - caja.x0), (H - 34) / (caja.y1 - caja.y0));
+    var cx = W / 2, cy = H / 2 + 6 - (caja.y0 + caja.y1) / 2 * esc;
     ctx.save();
     ctx.translate(cx, cy); ctx.scale(esc, esc);
     BM.dibujarBestia(ctx, 0, 0, s, { fase: (opciones && opciones.fase) || 0.6, sinSombra: true });
@@ -126,12 +136,11 @@
 
     if (opciones && opciones.sinCotas) return;
     // Cotas tipo lámina técnica
-    var h = s.radio * 0.78 * s.tamCabeza;
-    var yCab = cy + (BM.anclajeCabeza(d.tor, s.radio) - h * 0.35) * esc;
+    var pt = BM.puntosBestia(s);
     var cotas = [
-      { px: cx, py: yCab, tx: 14, ty: 22, txt: 'Cabeza: ' + BM.animalPorId(d.cab).nombre, al: 'left' },
-      { px: cx + s.radio * 0.5 * esc, py: cy, tx: W - 14, ty: H / 2 - 18, txt: 'Torso: ' + BM.animalPorId(d.tor).nombre, al: 'right' },
-      { px: cx - s.radio * 0.75 * esc, py: cy + s.radio * 0.55 * esc, tx: 14, ty: H - 14, txt: 'Patas: ' + BM.animalPorId(d.pat).nombre, al: 'left' }
+      { px: cx + pt.cabeza.x * esc, py: cy + pt.cabeza.y * esc, tx: 14, ty: 22, txt: 'Cabeza: ' + BM.animalPorId(d.cab).nombre, al: 'left' },
+      { px: cx + pt.torso.x * esc, py: cy + pt.torso.y * esc, tx: W - 14, ty: H / 2 - 18, txt: 'Torso: ' + BM.animalPorId(d.tor).nombre, al: 'right' },
+      { px: cx + pt.patas.x * esc, py: cy + pt.patas.y * esc, tx: 14, ty: H - 14, txt: 'Patas: ' + BM.animalPorId(d.pat).nombre, al: 'left' }
     ];
     ctx.font = '700 12px "Atkinson Hyperlegible", system-ui, sans-serif';
     cotas.forEach(function (c) {
@@ -587,7 +596,7 @@
       unidades.push({ x: p.x, y: p.y, b: BM.ensamblar(u.cab, u.tor, u.pat),
         o: { equipo: BM.COLOR.yo, ang: yo === 0 ? 0 : Math.PI, fase: Math.sin(t * 1.5 + i) * 0.4 } });
     });
-    var esc = { girar: yo === 1, unidades: unidades };
+    var esc = { girar: yo === 1, unidades: unidades, grilla: J.fase === 'draft' };
     if (J.sel) {
       var ps = J.arrastre && J.arrastre.movido ? J.arrastre.w : BM.posicionCelda(yo, J.sel.col, J.sel.prof);
       esc.seleccion = { x: ps.x, y: ps.y, r: BM.ensamblar(J.sel.cab, J.sel.tor, J.sel.pat).radio };
@@ -656,15 +665,16 @@
     var bestias = [['rino', 'puercoespin', 'lobo'], ['arana', 'tortuga', 'rana'], ['elefante', 'escorpion', 'arana']];
     bestias.forEach(function (b, i) {
       var s = BM.ensamblar(b[0], b[1], b[2]);
-      var cx = 100 + i * 180, cy = 105;
-      var esc = Math.min(2.6, 70 / (s.radio * 2.3));
+      var caja = BM.cajaBestia(s);
+      var esc = Math.min(3, 160 / (caja.x1 - caja.x0), 172 / (caja.y1 - caja.y0));
+      var cx = 100 + i * 180, cy = 98 - (caja.y0 + caja.y1) / 2 * esc;
       ctx.save(); ctx.translate(cx, cy); ctx.scale(esc, esc);
       BM.dibujarBestia(ctx, 0, 0, s, { fase: 0.4 + i, sinSombra: true });
       ctx.restore();
       ctx.fillStyle = '#dce8f3';
       ctx.font = '700 13px "Atkinson Hyperlegible", system-ui, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText(s.nombre, cx, 205);
+      ctx.fillText(s.nombre, 100 + i * 180, 207);
     });
   }
 
@@ -674,6 +684,7 @@
     construirPartes();
     actualizarLab();
     dibujarPortada();
+    BM.cargarSprites(function () { repintarIconos(); dibujarPortada(); actualizarLab(); });
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { dibujarPortada(); actualizarLab(); });
 
     $('btnIA').addEventListener('click', iniciarIA);

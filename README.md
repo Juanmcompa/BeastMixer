@@ -49,7 +49,7 @@ Lo que hay:
 Lo que viene:
 
 - Más animales, con roles nuevos (voladores, excavadores, sanadores)
-- Un sistema de arte por partes, para que cualquier combinación se vea bien
+- Animaciones de ataque y muerte, y más mapas
 - Mejoras para las unidades entre rondas
 - Un servidor chico para que el duelo oculte de verdad el ejército rival
 
@@ -60,17 +60,21 @@ El detalle (alcance, decisiones y hoja de ruta) está en [docs/DISEÑO.md](docs/
 HTML, CSS y JavaScript sin dependencias ni compilación. Dos decisiones lo hacen funcionar:
 
 - **El combate es determinista.** Usa un paso de tiempo fijo, un azar con semilla y operaciones que dan el mismo resultado en cualquier navegador. Los mismos dos ejércitos producen siempre el mismo combate, en cualquier dispositivo. Por eso el duelo no necesita servidor: cada jugador re-simula el combate y ve exactamente lo mismo que el otro.
-- **Las bestias se dibujan por código.** No hay imágenes: cada cabeza, torso y patas se dibuja en canvas con la paleta de su animal, así que cualquier combinación aparece sin preparar arte para ella.
+- **Las bestias se arman por piezas.** Cada animal tiene cuatro sprites vistos desde arriba: cabeza, torso, pata delantera y pata trasera. El juego los encastra en tiempo real usando puntos de anclaje (cuello, hombros y caderas) y escala cada pieza según el torso que la recibe, así que las 512 combinaciones aparecen sin dibujar ninguna a mano. Las patas se espejan para el otro lado y se balancean al caminar.
 
 ```
 index.html              página y pantallas
 css/estilo.css          estilos
 src/data/animales.js    todos los números del juego: partes, habilidades y reglas
 src/core/               lógica pura: ensamblaje, simulación, economía, duelo e IA
-src/render/             dibujo de las bestias y del tablero
+src/render/             armado de las bestias con sprites y dibujo del tablero
+assets/                 sprites de las piezas y mapas, listos para el juego
+arte/fuentes/           imágenes originales con fondo magenta
+tools/procesar_arte.py  recorta las piezas, quita el fondo y calcula los anclajes
 src/ui/juego.js         flujo de la partida e interacción
 tests/sim.test.mjs      tests de determinismo y balance
 docs/DISEÑO.md          documento de diseño
+docs/ARTE.md            cómo se generó el arte y cómo sumar animales o mapas
 ```
 
 ### Correrlo en tu compu
@@ -86,5 +90,7 @@ Para cambiar el balance, editá `src/data/animales.js` y volvé a correr los tes
 ## Créditos
 
 Diseño y desarrollo: **Juan M. Comparini**.
+
+Sprites y mapa generados con IA (Nano Banana, de Google) a partir de los prompts de [docs/ARTE.md](docs/ARTE.md), y procesados para el juego.
 
 BeastMixer es un proyecto independiente inspirado en *Impossible Creatures* (Relic Entertainment, hoy de THQ Nordic) y en *Mechabellum* (Game River). No está afiliado con esos juegos ni con sus dueños, y no usa sus nombres, personajes, arte ni código.

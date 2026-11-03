@@ -18,6 +18,15 @@
     var W = BM.CAMPO.ancho, H = BM.CAMPO.alto;
     var escala = 1, dpr = 1;
 
+    // Mapa de fondo (arte de assets/mapas). Si no carga, queda el plano azul.
+    var mapa = null;
+    var infoMapa = BM.SPRITES && BM.SPRITES.mapas && BM.SPRITES.mapas.isla;
+    if (infoMapa && typeof Image !== 'undefined') {
+      var im = new Image();
+      im.onload = function () { mapa = im; };
+      im.src = infoMapa.src;
+    }
+
     function ajustar() {
       var cont = canvas.parentElement;
       var maxW = cont.clientWidth, maxH = cont.clientHeight;
@@ -42,6 +51,30 @@
     function aPantalla(x, y, girar) { return girar ? { x: W - x, y: H - y } : { x: x, y: y }; }
 
     function dibujarFondo(escena) {
+      if (!mapa) return dibujarFondoPlano(escena);
+      var c = R.celda, zona = R.filasZona * c, neutral = R.filasNeutras * c;
+      ctx.drawImage(mapa, 0, 0, W, H);
+      var abajo = escena.girar ? COLOR.rival : COLOR.yo;
+      var arriba = escena.girar ? COLOR.yo : COLOR.rival;
+      // grilla sutil, sólo mientras se despliega
+      if (escena.grilla) {
+        ctx.strokeStyle = 'rgba(20,30,10,0.16)'; ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (var x = c; x < W; x += c) { ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, zona); ctx.moveTo(x + 0.5, zona + neutral); ctx.lineTo(x + 0.5, H); }
+        for (var y = c; y <= zona; y += c) { ctx.moveTo(0, y + 0.5); ctx.lineTo(W, y + 0.5); }
+        for (y = zona + neutral; y < H; y += c) { ctx.moveTo(0, y + 0.5); ctx.lineTo(W, y + 0.5); }
+        ctx.stroke();
+      }
+      // límite de cada zona en el color de su dueño
+      ctx.lineWidth = 3; ctx.setLineDash([10, 7]); ctx.globalAlpha = 0.85;
+      ctx.strokeStyle = arriba;
+      ctx.beginPath(); ctx.moveTo(0, zona - 1.5); ctx.lineTo(W, zona - 1.5); ctx.stroke();
+      ctx.strokeStyle = abajo;
+      ctx.beginPath(); ctx.moveTo(0, zona + neutral + 1.5); ctx.lineTo(W, zona + neutral + 1.5); ctx.stroke();
+      ctx.setLineDash([]); ctx.globalAlpha = 1;
+    }
+
+    function dibujarFondoPlano(escena) {
       var c = R.celda, zona = R.filasZona * c, neutral = R.filasNeutras * c;
       ctx.fillStyle = COLOR.fondo; ctx.fillRect(0, 0, W, H);
       // zona neutral algo más oscura
@@ -93,7 +126,8 @@
     // Las bestias se dibujan más grandes que su radio de colisión, para que se lean.
     var ESCALA_VISUAL = 1.4;
     function bestiaGrande(x, y, b, o) {
-      ctx.save(); ctx.translate(x, y); ctx.scale(ESCALA_VISUAL, ESCALA_VISUAL);
+      var e = BM.spritesListos && BM.spritesListos() ? 1.15 : ESCALA_VISUAL;
+      ctx.save(); ctx.translate(x, y); ctx.scale(e, e);
       BM.dibujarBestia(ctx, 0, 0, b, o);
       ctx.restore();
     }
@@ -150,7 +184,7 @@
       var ef = escena.efectos || [];
       for (i = 0; i < ef.length; i++) dibujarEfecto(ef[i], escena.girar);
 
-      dibujarCotas(escena);
+      if (escena.grilla || !mapa) dibujarCotas(escena);
     }
 
     function dibujarEfecto(e, girar) {
